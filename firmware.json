@@ -1,10 +1,7 @@
 {
-  "name": "FOMA",
+  "name": "POCKET WAVE",
   "version": "0.1",
-  "identity": "FM-1_95",
-  "options": {
-    "usb_audio": true,
-    "trs_midi": true,
-    "midi_clock": true
-  }
+  "identity": "FM-1_96",
+  "platform": "felucca",
+  "options": {"usb_audio": false, "trs_midi": false, "midi_clock": false, "bluetooth": false}
 }

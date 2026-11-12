@@ -1,0 +1,22 @@
+name: Pocket Wave firmware
+on:
+  push:
+    branches: [main]
+    paths: ['src/**', 'firmware.json', '.github/workflows/pocket-wave.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build device and emulator
+        run: docker run --rm --platform linux/amd64 -v "$PWD:/work" konsumer/foma-toolchain python3 tools/build.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pocket-wave-experimental
+          path: |
+            build/*.fwsc
+            build/web/
+          if-no-files-found: error
