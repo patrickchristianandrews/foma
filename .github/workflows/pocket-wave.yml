@@ -2,7 +2,7 @@ name: Pocket Wave firmware
 on:
   push:
     branches: [main]
-    paths: ['src/**', 'firmware.json', 'tools/package_pocket_wave.py', '.github/workflows/pocket-wave.yml']
+    paths: ['src/**', 'firmware.json', 'tools/package_pocket_wave.py', 'tools/package_dx7.py', '.github/workflows/pocket-wave.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -17,6 +17,8 @@ jobs:
         run: |
           sudo chown -R "$(id -u):$(id -g)" build
           python3 tools/package_pocket_wave.py
+      - name: Fetch and bundle all 26 external DX7 banks
+        run: python3 tools/package_dx7.py
       - uses: actions/upload-artifact@v4
         with:
           name: Pocket-Wave-complete
