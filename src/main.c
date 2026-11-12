@@ -31,9 +31,9 @@ typedef struct {uint8_t voice,sh,drum;uint32_t inc;int32_t amp,idx;} Event;
 static Event queue[64];
 typedef struct {uint32_t ph,mp,inc;int32_t env,idx;uint8_t sh;} Voice;
 static Voice v[NV];
-static int32_t ke,se,he,prevNoise; static uint32_t kp,ki,kbase,noise=1234567;
+static int32_t ke,se,he,prevNoise; static uint32_t kp,ki,kbase,noise=0xA5A5A5A5u;
 static int playing,recording,pos,section,step,bar;
-static uint32_t due,remainder,active[8],lastFace,lastHud;
+static uint32_t due,remMs,active[8],lastFace,lastHud;
 typedef struct {int x,y,vx,vy,ox,oy;uint8_t expr; } Face;
 static Face f[8]; static uint8_t faceIndex;
 static uint32_t rnd(uint32_t n){return n?random32()%n:0;}
@@ -62,7 +62,7 @@ void audio(int32_t *out,uint32_t frames){
  if(ke>32){kp+=ki;ki-=(ki-kbase)>>9;sum+=(sine(kp)*ke)>>17;ke-=ke>>11;}
  if(se>32){sum+=(nz*se)>>17;se-=se>>10;}
  if(he>32){sum+=((nz-prevNoise)*he)>>18;he-=he>>10;}prevNoise=nz;
- if(sum>24000)sum=24000;if(sum< -24000)sum=-24000;
+ if(sum>24000){sum=24000;}if(sum< -24000){sum=-24000;}
  out[n*2]+=sum;out[n*2+1]+=sum;
  }
 }
@@ -104,14 +104,14 @@ static void hud(void){
  for(int i=0;i<16;i++){int d=p.pat[playing?section:0][p.sel][i];uint16_t col=(p.sel?d!=EMPTY:d!=0)?colors[p.sel]:RGB(35,35,35);rect(i*15,218,12,12,col);if(playing&&i==step)frame(i*15,216,14,16,WHITE);}
 }
 void setup(void){
- clear(BLACK);p.magic=0x50573031;p.style=0;p.sel=0;p.mute=0;generate();
+ clear(BLACK);p.magic=12345u;p.style=0;p.sel=0;p.mute=0;generate();
  Project saved;if(settings_load(&saved,sizeof(saved))==0&&saved.magic==p.magic&&saved.style<4&&saved.sel<8&&saved.bpm>=60&&saved.bpm<=180)p=saved;
  for(int i=0;i<8;i++){f[i].x=8+(i%4)*55;f[i].y=45+(i/4)*65;f[i].vx=rnd(2)?1:-1;f[i].vy=rnd(2)?1:-1;f[i].ox=f[i].x;f[i].oy=f[i].y;faceDraw(i,0);}
  hud();
 }
 void loop(void){
  uint32_t now=millis();
- if(button_pressed(BTN_PLAY)){playing=!playing;if(playing){pos=0;due=now;remainder=0;}}
+ if(button_pressed(BTN_PLAY)){playing=!playing;if(playing){pos=0;due=now;remMs=0;}}
  if(button_pressed(BTN_REC))recording=!recording;
  int d=encoder(ENC_SELECT);if(d)p.sel=(uint8_t)((p.sel+d%8+8)%8);
  d=encoder(ENC_PRESETS);if(d){p.style=(uint8_t)((p.style+d%4+4)%4);generate();}
@@ -121,14 +121,14 @@ void loop(void){
  if(button_pressed(BTN_SEQ)){section=(section+1)%5;for(int i=0;i<8;i++)if(order[i]==section){pos=i*64;break;}}
  if(button_pressed(BTN_SAVE)&&!playing)settings_save(&p,sizeof(p));
  for(int k=0;k<KEY_COUNT;k++)if(key_pressed(k)){
- int d=p.sel==0?(1<<(k%4)):k%10;sound(p.sel,d);
- if(recording)p.pat[playing?section:0][p.sel][playing?step:k%16]=(uint8_t)d;
+ int kd=p.sel==0?(1<<(k%4)):k%10;sound(p.sel,kd);
+ if(recording)p.pat[playing?section:0][p.sel][playing?step:k%16]=(uint8_t)kd;
  }
- int catchup=0;while(playing&&(int32_t)(now-due)>=0&&catchup++<4){transport();due+=15000/p.bpm;remainder+=15000%p.bpm;if(remainder>=p.bpm){remainder-=p.bpm;due++;}}
+ int catchup=0;while(playing&&(int32_t)(now-due)>=0&&catchup++<4){transport();due+=15000/p.bpm;remMs+=15000%p.bpm;if(remMs>=p.bpm){remMs-=p.bpm;due++;}}
  if(now-lastFace>=35){lastFace=now;int i=faceIndex;Face *a=&f[i];
  rect(a->ox-1,a->oy-1,26,20,BLACK);
- a->x+=a->vx;a->y+=a->vy;if(a->x<2){a->x=2;a->vx=1;}if(a->x>214){a->x=214;a->vx=-1;}if(a->y<35){a->y=35;a->vy=1;}if(a->y>170){a->y=170;a->vy=-1;}
- for(int j=0;j<8;j++)faceDraw(j,0);faceIndex=(faceIndex+1)%8;
+ a->x+=a->vx*3;a->y+=a->vy*3;if(a->x<2){a->x=2;a->vx=1;}if(a->x>214){a->x=214;a->vx=-1;}if(a->y<35){a->y=35;a->vy=1;}if(a->y>170){a->y=170;a->vy=-1;}
+ for(int j=0;j<8;j++){faceDraw(j,0);}faceIndex=(faceIndex+1)%8;
  }
  if(now-lastHud>=140){lastHud=now;hud();}
  led_button(BTN_PLAY,playing);led_button(BTN_REC,recording);

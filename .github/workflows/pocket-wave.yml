@@ -5,22 +5,32 @@ on:
     paths: ['src/**', 'firmware.json', 'tools/package_pocket_wave.py', 'tools/package_dx7.py', '.github/workflows/pocket-wave.yml']
   workflow_dispatch:
 permissions:
-  contents: read
+  contents: write
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - name: Build device and emulator
-        run: docker run --rm --platform linux/amd64 -v "$PWD:/work" konsumer/foma-toolchain python3 tools/build.py
-      - name: Package installer-first release
-        run: |
-          sudo chown -R "$(id -u):$(id -g)" build
-          python3 tools/package_pocket_wave.py
-      - name: Fetch and bundle all 26 external DX7 banks
-        run: python3 tools/package_dx7.py
-      - uses: actions/upload-artifact@v4
+      - name: Build firmware and emulator (same command as ./fm1 build)
+        run: docker run --rm --init --platform linux/amd64 -u "$(id -u):$(id -g)" -v "$PWD:/work" konsumer/foma-toolchain python3 tools/build.py
+      - name: Require a compiled firmware package
+        run: test -s build/web/firmware.fwsc
+      - name: Package everything (installer first, firmware, emulator, DX7 banks, source, browser toy)
+        run: python3 tools/package_pocket_wave.py
+      - name: Keep the files with this run
+        uses: actions/upload-artifact@v4
         with:
           name: Pocket-Wave-complete
-          path: build/Pocket-Wave-complete.zip
+          path: |
+            build/Pocket-Wave-complete.zip
+            build/Pocket-Wave.fwsc
+            build/RELEASE-NOTES.md
           if-no-files-found: error
+      - name: Publish a prerelease with plain download links
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "pocket-wave-${GITHUB_RUN_NUMBER}" build/Pocket-Wave-complete.zip build/Pocket-Wave.fwsc \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
+            --title "Pocket Wave experimental build ${GITHUB_RUN_NUMBER}" --notes-file build/RELEASE-NOTES.md
