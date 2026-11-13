@@ -58,8 +58,9 @@ js = sub1(r"location\.hash \|\| '#emulator'", "location.hash || '#install'", js,
 'ENV, LFO, EDIT, FX and GLO open sound and global pages. The screen labels the knobs.\n'
 'KNOB1 tempo. KNOB2 level or step. KNOB3 FM depth, motion, drive, key or step note.\n'
 'KNOB4 tail, section or octave. ALGORITHM changes FM ratio or drum drive. OCT +/- shifts pitch.\n'
-'SAVE stores the pattern while stopped. Sound adjustments are session-only.\n\n'
-'Not included: DX7 playback, the 35-sound library, the full browser Studio, USB audio, Bluetooth, MIDI clock.\n'
+'EDIT + ALGORITHM browses instruments: 36 FM patches per melodic track and 8 kits for Bear. Turn while stopped to audition.\n'
+'SAVE stores patterns and instrument choices while stopped. Knob tweaks are session-only.\n\n'
+'Not included: DX7 playback, the full browser Studio, USB audio, Bluetooth, MIDI clock.\n'
 'Back up your device and read the Rescue tab before installing.\n', encoding='utf-8')
 
 # ---- assemble package ----

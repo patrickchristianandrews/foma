@@ -21,7 +21,39 @@ static uint8_t level[8]={85,85,85,85,85,85,85,85};
 static uint8_t shape[8]={0,1,1,1,1,1,1,1};
 static int toneDepth[8]={0,16,20,28,8,36,24,12};
 static int tails[8]={11,12,13,13,15,11,12,13};
+typedef struct {const char *name; uint8_t ratio,depth,tail,level; int8_t shift;} Instrument;
+static const Instrument instruments[]={
+ {"Round bass",1,18,12,82,-12},{"Rubber bass",2,49,11,83,-12},{"Sub sine",1,0,15,78,-12},
+ {"Acid bass",3,69,12,78,-12},{"Octave bass",2,35,13,75,-24},{"Reed bass",4,24,13,76,-12},
+ {"Velvet keys",2,13,14,78,0},{"Stage keys",3,34,13,76,0},{"Wurlie",1,49,12,73,0},
+ {"Toy piano",6,31,11,72,12},{"Clav",5,62,10,68,0},{"Harpsichord",7,39,11,70,0},
+ {"Glass bell",6,30,16,65,12},{"Tiny chime",8,21,14,62,12},{"Gong",5,68,17,62,-12},
+ {"Vibraphone",3,17,15,69,0},{"Marimba",4,45,10,73,0},{"Kalimba",7,22,12,67,0},
+ {"Air pad",1,7,17,65,0},{"Cloud pad",2,10,16,67,12},{"Halo pad",3,16,17,63,0},
+ {"Dark pad",1,26,17,62,-12},{"Soft strings",2,41,16,64,0},{"Space choir",4,12,16,62,0},
+ {"Square lead",3,58,13,69,0},{"Bright lead",5,40,14,70,0},{"Flute",1,7,13,74,12},
+ {"Reed lead",4,50,13,70,0},{"Hollow lead",2,29,14,72,0},{"Chip pulse",6,56,12,65,12},
+ {"Bubble pluck",2,59,10,72,0},{"Laser pluck",7,67,10,67,12},{"Wood pluck",3,33,10,70,0},
+ {"Dust spark",8,72,11,60,12},{"Alien call",5,57,16,63,0},{"Metal hit",7,72,12,66,-12}
+};
+static const Instrument kits[]={
+ {"Pocket kit",1,0,11,85,0},{"Deep club",1,5,12,94,-9},{"Tight electro",1,18,9,80,7},
+ {"Dusty breaks",1,11,10,83,-4},{"Soft clicks",1,0,7,62,12},{"Big room",1,26,13,88,-2},
+ {"Tin machine",1,40,8,78,15},{"Slow thunder",1,8,14,84,-17}
+};
+#define COUNT(a) ((int)(sizeof(a)/sizeof((a)[0])))
+static uint8_t preset[NC]={0,0,6,24,18,30,33,9};
 static int motion[8], drive[8];
+static int wrap(int value,int count);
+static const Instrument *instrument(int ch){return ch?&instruments[preset[ch]]:&kits[preset[ch]];}
+static void chooseInstrument(int ch,int id){
+ preset[ch]=(uint8_t)wrap(id,ch?COUNT(instruments):COUNT(kits));
+ const Instrument *patch=instrument(ch);
+ shape[ch]=patch->ratio-1;level[ch]=patch->level;toneDepth[ch]=patch->depth;tails[ch]=patch->tail;
+ motion[ch]=0;drive[ch]=ch?0:patch->depth;
+}
+typedef struct { Project project; uint8_t presets[NC]; } SavedProject;
+
 static const char *pageName[]={"STAGE","MIX","ENVELOPE","MOTION","SOUND EDIT","GLOBAL","FX","STEPS"};
 static const char *knobGuide[]={"TEMPO  LEVEL  FM  TAIL","TEMPO  LEVEL  FM  TAIL","TEMPO  LEVEL  FM  TAIL","TEMPO  LEVEL  MOT  TAIL","TEMPO  LEVEL  FM  TAIL","TEMPO  OUT  KEY  OCT","TEMPO  LEVEL  DRIVE  TAIL","TEMPO  STEP  NOTE  LOOP"};
 static int clamp(int value,int low,int high){return value<low?low:value>high?high:value;}
@@ -36,7 +68,6 @@ static const uint8_t progress[4][4]={{0,5,2,6},{0,3,0,4},{0,4,5,3},{0,0,5,6}};
 static const uint16_t colors[8]={RGB(255,100,40),RGB(190,90,255),RGB(255,210,60),RGB(70,220,250),RGB(255,120,210),RGB(90,255,170),RGB(250,150,80),RGB(160,180,255)};
 static const uint8_t vb[8]={0,0,1,4,5,8,9,10};
 static const uint8_t vn[8]={0,1,3,1,3,1,1,1};
-static const int8_t oct[8]={0,-2,-1,0,-1,1,0,0};
 static volatile uint8_t head,tail;
 typedef struct {uint8_t voice,sh,drum,ratio;uint32_t inc;int32_t amp,idx;} Event;
 static Event queue[64];
@@ -52,9 +83,9 @@ static void enqueue(Event e){uint8_t h=(head+1)&63;if(h==tail)return;queue[head]
 static int degree(int d){return scale[p.style==2?0:1][d%7]+12*(d/7);}
 static void sound(int ch,int d){
  active[ch]=millis()+180;
- if(ch==0){Event e={0,(uint8_t)tails[0],(uint8_t)d,0,note_inc(68+transpose+octave*12),level[0]*240,drive[0]};enqueue(e);return;}
+ if(ch==0){Event e={0,(uint8_t)tails[0],(uint8_t)d,0,note_inc(68+instrument(0)->shift+transpose+octave*12),level[0]*240,drive[0]};enqueue(e);return;}
  for(int j=0;j<vn[ch];j++){
- int note=60+12*(oct[ch]+octave)+transpose+degree(d+j*2);if(note>127)note=127;if(note<0)note=0;
+ int note=60+12*octave+instrument(ch)->shift+transpose+degree(d+j*2);if(note>127)note=127;if(note<0)note=0;
  Event e={(uint8_t)(vb[ch]+j),(uint8_t)tails[ch],0,(uint8_t)(shape[ch]+1),note_inc(note),((ch==2||ch==4)?70:160)*level[ch],toneDepth[ch]+drive[ch]+(motion[ch]?(int)((millis()/40)%12)*motion[ch]/8:0)};enqueue(e);
  }
 }
@@ -112,6 +143,7 @@ static void hud(void){
  if(page!=HOME){
   rect(0,48,240,145,BLACK);
   text(8,60,names[p.sel],colors[p.sel],FONT_SMALL);
+  text(72,60,instrument(p.sel)->name,WHITE,FONT_SMALL);
   const char *labels[]={"LEVEL","FM DEPTH","DECAY","RATIO","MOTION","DRIVE"};
   int values[]={level[p.sel],toneDepth[p.sel],tails[p.sel],shape[p.sel]+1,motion[p.sel],drive[p.sel]};
   if(page==GLOBAL){labels[0]="MASTER";values[0]=masterLevel;labels[1]="KEY";values[1]=transpose;labels[2]="OCTAVE";values[2]=octave;}
@@ -120,14 +152,20 @@ static void hud(void){
  }
 
  rect(0,0,240,48,BLACK);text(0,0,"LIQUID WAVE",WHITE,FONT_SMALL);text(125,0,pageName[page],WHITE,FONT_SMALL);
- text(0,16,styles[p.style],WHITE,FONT_SMALL);char b[12];format_int(b,p.bpm);text(96,16,b,WHITE,FONT_SMALL);text(0,32,!p.sel&&page!=GLOBAL&&page!=SEQ?"TEMPO  LEVEL DRIVE TAIL":knobGuide[page],WHITE,FONT_SMALL);
+ text(0,16,styles[p.style],WHITE,FONT_SMALL);char b[12];format_int(b,p.bpm);text(96,16,b,WHITE,FONT_SMALL);text(0,32,page==EDIT?"ALGORITHM: INSTRUMENT":!p.sel&&page!=GLOBAL&&page!=SEQ?"TEMPO  LEVEL DRIVE TAIL":knobGuide[page],WHITE,FONT_SMALL);
  rect(0,194,240,46,BLACK);text(0,194,sections[section],WHITE,FONT_SMALL);
  text(96,194,names[p.sel],colors[p.sel],FONT_SMALL);text(192,194,recording?"REC":"",WHITE,FONT_SMALL);
  for(int i=0;i<16;i++){int d=p.pat[section][p.sel][i];uint16_t col=(p.sel?d!=EMPTY:d!=0)?colors[p.sel]:RGB(35,35,35);rect(i*15,218,12,12,col);if((playing&&i==step)||(page==SEQ&&i==cursor))frame(i*15,216,14,16,WHITE);}
 }
 void setup(void){
  clear(BLACK);p.magic=12345u;p.style=0;p.sel=0;p.mute=0;generate();
- Project saved;if(settings_load(&saved,sizeof(saved))==0&&saved.magic==p.magic&&saved.style<4&&saved.sel<8&&saved.bpm>=60&&saved.bpm<=180)p=saved;
+ SavedProject saved;
+ if(settings_load(&saved,sizeof(saved))==0&&saved.project.magic==p.magic&&saved.project.style<4&&saved.project.sel<8&&saved.project.bpm>=60&&saved.project.bpm<=180){
+  p=saved.project;for(int ch=0;ch<NC;ch++)chooseInstrument(ch,saved.presets[ch]);
+ }else{
+  Project legacy;if(settings_load(&legacy,sizeof(legacy))==0&&legacy.magic==p.magic&&legacy.style<4&&legacy.sel<8&&legacy.bpm>=60&&legacy.bpm<=180)p=legacy;
+  for(int ch=0;ch<NC;ch++)chooseInstrument(ch,preset[ch]);
+ }
  for(int i=0;i<8;i++){f[i].x=8+(i%4)*55;f[i].y=45+(i/4)*65;f[i].vx=rnd(2)?1:-1;f[i].vy=rnd(2)?1:-1;f[i].ox=f[i].x;f[i].oy=f[i].y;faceDraw(i,0);}
  hud();
 }
@@ -146,12 +184,13 @@ void loop(void){
  if(button_pressed(BTN_OCT_DOWN))octave=clamp(octave-1,-2,2);
  if(button_pressed(BTN_OCT_UP))octave=clamp(octave+1,-2,2);
  if(button_pressed(BTN_ARP)){generate();pos=0;due=now;}
- if(button_pressed(BTN_SAVE)&&!playing)settings_save(&p,sizeof(p));
+ if(button_pressed(BTN_SAVE)&&!playing){SavedProject saved={0};saved.project=p;for(int ch=0;ch<NC;ch++)saved.presets[ch]=preset[ch];settings_save(&saved,sizeof(saved));}
  int d=encoder(ENC_SELECT);if(d){p.sel=(uint8_t)wrap(p.sel+d,8);if(page==HOME)page=MIX;}
  d=encoder(ENC_PRESETS);if(d){p.style=(uint8_t)wrap(p.style+d,4);generate();pos=0;due=now;}
  int ch=p.sel;
  d=encoder(ENC_ALGORITHM);if(d){
-  if(ch)shape[ch]=(uint8_t)wrap(shape[ch]+d,6);
+  if(page==EDIT){chooseInstrument(ch,preset[ch]+d);if(!playing)sound(ch,ch?0:7);}
+  else if(ch)shape[ch]=(uint8_t)wrap(shape[ch]+d,8);
   else drive[0]=clamp(drive[0]+d,0,40);
  }
  d=encoder(ENC_KNOB1);if(d)p.bpm=(uint8_t)clamp(p.bpm+d,60,180);
