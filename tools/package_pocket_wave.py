@@ -51,11 +51,14 @@ js = sub1(r"location\.hash \|\| '#emulator'", "location.hash || '#install'", js,
 (WEB / 'app.js').write_text(js, encoding='utf-8')
 
 (WEB / 'CONTROLS.txt').write_text(
-'POCKET WAVE - EXPERIMENTAL NATIVE FM-1 PROTOTYPE (not tested on hardware)\n\n'
-'PLAY start/stop   REC toggle overdub   SELECT knob: channel   PRESETS knob: style (Synth, Funk, Ballad, House)\n'
-'KNOB1 tempo   SEL mute selected channel   ARP regenerate   SEQ next section   SAVE project (only while stopped)\n'
-'Keys play the selected channel; with REC on they write its pattern. On the drum channel keys cycle kick, snare, hat, open hat.\n\n'
-'8 channels, 5 sections, a fixed 32-bar arrangement, simple two-operator FM voices and synthesised drums, eight floating colour faces.\n'
+ 'LIQUID WAVE - EXPERIMENTAL FM-1 FIRMWARE (not tested on hardware)\n\n'
+'HOME returns to the animated stage. SELECT chooses an animal track. SEL mutes it.\n'
+'PLAY starts/stops. REC overdubs. ARP generates a song. PRESETS changes style.\n'
+'SEQ opens step editing; press it again to toggle section loop. Keys toggle steps.\n'
+'ENV, LFO, EDIT, FX and GLO open sound and global pages. The screen labels the knobs.\n'
+'KNOB1 tempo. KNOB2 level or step. KNOB3 FM depth, motion, drive, key or step note.\n'
+'KNOB4 tail, section or octave. ALGORITHM changes FM ratio or drum drive. OCT +/- shifts pitch.\n'
+'SAVE stores the pattern while stopped. Sound adjustments are session-only.\n\n'
 'Not included: DX7 playback, the 35-sound library, the full browser Studio, USB audio, Bluetooth, MIDI clock.\n'
 'Back up your device and read the Rescue tab before installing.\n', encoding='utf-8')
 
