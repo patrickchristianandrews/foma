@@ -36,6 +36,7 @@ void audio(int32_t *out, uint32_t frames);
 
 /* ---- time */
 #define SAMPLE_RATE 44100u
+int battery_bars(void); /* 0..3 estimated charge bars, -1 unavailable */
 uint32_t millis(void); /* ms since power-on */
 uint32_t micros(void); /* us, wraps every ~179 s: use differences */
 
