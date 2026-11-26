@@ -406,9 +406,18 @@ static void stage_plane(uint32_t now){
  }
  const char *msg=skyMessages[skyMessage];
  int w=text_width(msg,FONT_SMALL)+12;
- int x=(int)((now-skyStart)/40u)-28;
- int left=x-w-14;
+ int x=268-(int)((now-skyStart)/40u);
+ int left=x+40;
  rect(0,48,240,42,BLACK);
+ /* Exhaust puffs drift behind the left-facing plane, expand and fade. */
+ for(int i=0;i<9;i++){
+  int age=(int)((now/85u+i*7u)%63u);
+  int px=x+24+age/2,py=65+((i*3+age/4)%9)-4;
+  int rad=1+age/23;
+  uint16_t shade=age<20?RGB(191,216,230):age<42?RGB(109,140,163):RGB(54,75,97);
+  for(int dy=-rad;dy<=rad;dy++)for(int dx=-rad;dx<=rad;dx++)
+   if(dx*dx+dy*dy<=rad*rad&&px+dx>=0&&px+dx<240)pixel(px+dx,py+dy,shade);
+ }
  /* clipped banner and tow rope, with lettering only where fully visible */
  int lo=clamp(left,0,240),hi=clamp(left+w,0,240);
  if(hi>lo){
@@ -420,11 +429,11 @@ static void stage_plane(uint32_t now){
   int tx=left+6+i*8;char letter[2]={msg[i],0};
   if(tx>=0&&tx<=232)text(tx,60,letter,RGB(56,33,79),FONT_SMALL);
  }
- lo=clamp(left+w,0,239);hi=clamp(x,0,239);
- if(x>0&&left+w<240&&hi>lo)line(lo,68,hi,65,RGB(200,215,235));
+ lo=clamp(x+26,0,239);hi=clamp(left,0,239);
+ if(left>0&&x+26<240&&hi>lo)line(lo,65,hi,68,RGB(200,215,235));
  /* side profile, wings, tail, cockpit and spinning propeller */
  for(int k=0;k<27;k++){
-  int px=x+k;if(px<0||px>=240)continue;
+  int px=x+26-k;if(px<0||px>=240)continue;
   if(k<23)rect(px,63,1,5,RGB(210,235,255));
   if(k<6)rect(px,58+k/2,1,5,RGB(180,140,240));
   if(k>=8&&k<=17)rect(px,68,1,5-(k-8)/3,RGB(180,140,240));
