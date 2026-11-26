@@ -47,3 +47,18 @@ jobs:
           gh release create "pocket-wave-${GITHUB_RUN_NUMBER}" build/Pocket-Wave-complete.zip build/Pocket-Wave.fwsc \
             --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
             --title "Pocket Wave experimental build ${GITHUB_RUN_NUMBER}" --notes-file build/RELEASE-NOTES.md
+
+      - name: Publish separate Advanced Liquid Wave beta
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'liquid-wave-fm1-development'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BETA_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          cp build/Pocket-Wave-complete.zip build/Advanced-Liquid-Wave-beta.zip
+          cp build/Pocket-Wave.fwsc build/Advanced-Liquid-Wave-beta.fwsc
+          tag="advanced-liquid-wave-beta-${BETA_SHA:0:12}"
+          if ! gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$tag" --repo "$GITHUB_REPOSITORY" --target "$BETA_SHA" --prerelease --title "Advanced Liquid Wave Beta" --notes "Experimental hardware beta; emulator checks passed, physical hardware not verified. Native Wi-Fi, live weather, online radio and Frodhes are not integrated. Original Liquid Wave release remains separate."
+          fi
+          gh release upload "$tag" build/Advanced-Liquid-Wave-beta.zip build/Advanced-Liquid-Wave-beta.fwsc --repo "$GITHUB_REPOSITORY" --clobber
