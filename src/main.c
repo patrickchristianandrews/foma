@@ -171,9 +171,9 @@ void audio(int32_t *out,uint32_t frames){
  mix_sample((sine(a->ph+offset)*env)>>17,a->pan,&sum,&left,&right);
  a->env-=a->env>>a->sh;}
  noise^=noise<<13;noise^=noise>>17;noise^=noise<<5;int32_t nz=(int32_t)(noise>>17)-16384;
- if(ke>32){kp+=ki;ki-=(ki-kbase)>>9;drums+=(sine(kp)*ke)>>17;ke-=ke>>drumTail;}
- if(se>32){drums+=(nz*se)>>17;se-=se>>(drumTail-1);}
- if(he>32){drums+=((nz-prevNoise)*he)>>18;he-=he>>(drumTail-1);}prevNoise=nz;
+ if(ke>32){kp+=ki;ki-=(ki-kbase)>>9;drums+=(sine(kp)*ke)>>17;ke-= (ke>>drumTail) ? (ke>>drumTail) : 1;}
+ if(se>32){drums+=(nz*se)>>17;se-= (se>>(drumTail-1)) ? (se>>(drumTail-1)) : 1;}
+ if(he>32){drums+=((nz-prevNoise)*he)>>18;he-= (he>>(drumTail-1)) ? (he>>(drumTail-1)) : 1;}prevNoise=nz;
  mix_sample(drums,drumPan,&sum,&left,&right);
  int volume=masterLevel;
  out[n*2]+=clamp((sum+left)*volume/100,-24000,24000);
