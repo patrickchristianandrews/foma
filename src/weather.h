@@ -30,4 +30,6 @@ LiquidWeatherMusic liquid_weather_music(const LiquidWeather *weather, uint8_t rh
 int liquid_weather_accept(unsigned destination, const LiquidWeather *reading);
 int liquid_weather_destination(void);
 
+int liquid_weather_parse(const char *json,unsigned len,LiquidWeather *out);
+
 #endif
