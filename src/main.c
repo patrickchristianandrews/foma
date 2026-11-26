@@ -165,7 +165,20 @@ static void bluetooth_input(void) {
  }
 }
 #endif
+/* Increase instrument loudness by 50% at the mixer, without changing
+ * oscillator envelopes, FM timbre, track balance or pan. */
+static int32_t instrument_gain(int32_t sample){
+ return sample+sample/2;
+}
+/* Gentle bounded output knee retains headroom for overlapping notes and FX. */
+static int32_t output_limit(int32_t sample){
+ int32_t a=sample<0?-sample:sample;
+ if(a>16000)a=16000+(a-16000)/4;
+ if(a>24000)a=24000;
+ return sample<0?-a:a;
+}
 static void mix_sample(int32_t sample,int pan,int32_t *mono,int32_t *left,int32_t *right){
+ sample=instrument_gain(sample);
  if(!pan){*mono+=sample;return;}
  /* Constant gain on the near speaker; attenuate the opposite speaker. */
  *left+=pan>0?(sample*(127-pan))/128:sample;
@@ -213,7 +226,7 @@ void audio(int32_t *out,uint32_t frames){
    animalRemaining--;
   }
  }
- int32_t dryL=clamp(sum+left,-24000,24000),dryR=clamp(sum+right,-24000,24000);
+ int32_t dryL=output_limit(sum+left),dryR=output_limit(sum+right);
  if(fxFilter){int shift=1+fxFilter/16;filterL+=(dryL-filterL)>>shift;filterR+=(dryR-filterR)>>shift;dryL=filterL;dryR=filterR;}
  else {filterL=dryL;filterR=dryR;}
  if(fxDelay||fxReverb||fxChorus){
@@ -228,8 +241,8 @@ void audio(int32_t *out,uint32_t frames){
  }else {echoL[echoPos]=0;echoR[echoPos]=0;}
  echoPos=(echoPos+1)&4095u;
  int volume=masterLevel;
- out[n*2]+=clamp(dryL*volume/100,-24000,24000);
- out[n*2+1]+=clamp(dryR*volume/100,-24000,24000);
+ out[n*2]+=output_limit(dryL*volume/100);
+ out[n*2+1]+=output_limit(dryR*volume/100);
  }
 }
 static void generate(void){
