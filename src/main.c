@@ -75,7 +75,7 @@ static const char *knobGuide[]={"TEMPO  LEVEL  FM  TAIL","TEMPO  LEVEL  FM  TAIL
 static int clamp(int value,int low,int high){return value<low?low:value>high?high:value;}
 static int wrap(int value,int count){return (value%count+count)%count;}
 
-static const char *names[8]={"BEAR","CAT","BUNNY","CHICK","CLOUD","ALIEN","GHOST","TIDBIT"};
+static const char *names[8]={"BEAR","DOG","BUNNY","CHICK","CLOUD","ALIEN","GHOST","TIDBIT"};
 static const char *sections[5]={"INTRO","VERSE","CHORUS","BRIDGE","OUTRO"};
 static const char *styles[4]={"SYNTH","FUNK","BALLAD","HOUSE"};
 static const uint8_t scale[2][7]={{0,2,4,5,7,9,11},{0,2,3,5,7,8,10}};
@@ -260,39 +260,61 @@ static void weather_transport(uint32_t now){
 }
 
 static void weather_hud(uint32_t now){
- static const uint16_t accent=RGB(154,215,255);
+ const uint16_t peach=RGB(255,174,117), purple=RGB(183,137,235), dim=RGB(103,66,76);
+ const uint16_t sky=RGB(18,17,37);
  char value[12];
+ int moon=weather.place==LIQUID_MOON;
+ int live=!moon&&weather_fresh(now);
+ unsigned code=live?weather.reading.code:61;
+ unsigned minute=live?(weather.reading.local_minute+(now-weather.synced)/60000u)%1440:1260;
+ int night=minute<360||minute>=1080;
+ int snow=code>=71&&code<=77;
+ int rain=(code>=51&&code<=67)||(code>=80&&code<=82)||code>=95;
  rect(0,0,240,240,BLACK);
- text(8,8,"LIQUID WAVE / WEATHER",accent,FONT_SMALL);
- if(weather.place==LIQUID_MOON){
-  text(8,36,"THE MOON",WHITE,FONT_BIG);
-  text(8,80,"LUNAR SOUND MODE",accent,FONT_SMALL);
-  text(8,104,"NO EARTH WEATHER HERE",WHITE,FONT_SMALL);
- }else{
-  text(8,36,liquid_places[weather.place].name,WHITE,FONT_SMALL);
-  if(!weather.available){
-   text(8,64,"--:--",accent,FONT_BIG);
-   text(8,108,"WAITING FOR WEATHER",WHITE,FONT_SMALL);
-  }else{
-   unsigned age=(now-weather.synced)/60000u;
-   unsigned minute=(weather.reading.local_minute+age)%1440;
-   unsigned h=minute/60,m=minute%60;
-   char clock[]={(char)('0'+h/10),(char)('0'+h%10),':',(char)('0'+m/10),(char)('0'+m%10),0};
-   text(8,61,clock,accent,FONT_BIG);
-   text(8,102,liquid_weather_condition(weather.reading.code),WHITE,FONT_SMALL);
-   text(8,124,"TEMP C",accent,FONT_SMALL);
-   format_int(value,weather.reading.temperature10/10);text(94,124,value,WHITE,FONT_SMALL);
-   text(8,144,"WIND KM/H",accent,FONT_SMALL);
-   format_int(value,weather.reading.wind10/10);text(94,144,value,WHITE,FONT_SMALL);
-   text(8,164,"AQI",accent,FONT_SMALL);
-   if(weather.reading.has_aqi){format_int(value,weather.reading.aqi);text(94,164,value,WHITE,FONT_SMALL);}
-   else text(94,164,"--",WHITE,FONT_SMALL);
-   if(!weather_fresh(now))text(8,184,"LAST READING / STALE",accent,FONT_SMALL);
-  }
+ text(8,5,"TIDBIT WEATHER ROOM",peach,FONT_SMALL);
+ text(8,22,moon?"THE MOON":liquid_places[weather.place].name,WHITE,FONT_SMALL);
+ rect(61,43,166,105,night?sky:RGB(64,104,132));
+ for(int i=0;i<8;i++){
+  int x=65+i*20,h=12+(i*17)%35;
+  rect(x,144-h,15,h,dim);
+  for(int y=147-h;y<142;y+=8)rect(x+4,y,3,3,peach);
  }
- if(weather.playing)text(161,184,"PLAYING",accent,FONT_SMALL);
- text(8,202,"OCT+ TRAVEL / HOLD MOON",WHITE,FONT_SMALL);
- text(8,222,"HOME STAGE / PLAY JAM",WHITE,FONT_SMALL);
+ if(night||moon){rect(192,51,13,13,peach);rect(197,48,10,12,sky);}
+ else rect(192,51,15,15,RGB(255,220,100));
+ if(!moon&&(rain||snow))for(int i=0;i<29;i++){
+  int x=65+(i*37+(snow?now/180:now/90))%155;
+  int y=47+(i*19+now/(snow?180:35))%88;
+  if(snow)rect(x,y,2,2,WHITE);
+  else line(x,y,x-3,y+6,RGB(120,142,185));
+ }
+ frame(59,41,170,109,peach);
+ line(144,42,144,148,peach);line(60,94,227,94,peach);
+ line(31,39,31,65,peach);
+ line(20,65,42,65,peach);line(20,65,10,84,peach);line(42,65,52,84,peach);
+ line(10,84,52,84,peach);line(15,89,47,89,dim);
+ rect(8,150,224,3,peach);
+ /* Tidbit: reuse the existing mascot sprite, enlarged for the room. */
+ for(int y=0;y<18;y++)for(int x=0;x<24;x++){
+  uint16_t c=tidbitPortrait[y*24+x];
+  if(c)rect(98+x*3,96+y*3,3,3,c);
+ }
+ /* Plant, record player, mug and books. */
+ rect(199,136,17,14,purple);
+ line(207,136,207,116,purple);line(207,128,198,119,purple);
+ line(207,124,216,113,purple);
+ frame(12,168,68,31,peach);
+ frame(19,173,35,20,dim);frame(27,177,19,12,peach);
+ line(70,174,59,189,peach);
+ frame(104,177,23,21,peach);frame(127,180,9,12,peach);
+ for(int i=0;i<3;i++){int x=108+i*6;line(x,173,x+2,166-(int)((now/250+i)%3),dim);}
+ for(int i=0;i<5;i++)frame(166+i*10,172-i%3*5,8,26+i%3*5,i%2?purple:peach);
+ line(8,201,232,201,peach);
+ if(live){
+  text(8,205,liquid_weather_condition(code),WHITE,FONT_SMALL);
+  format_int(value,weather.reading.temperature10/10);text(185,205,value,WHITE,FONT_SMALL);text(210,205,"C",peach,FONT_SMALL);
+ }else text(8,205,moon?"LUNAR MODE":weather.available?"STALE / DEMO":"OFFLINE / DEMO",WHITE,FONT_SMALL);
+ text(8,222,"HOME STAGE / PLAY JAM",peach,FONT_SMALL);
+ if(weather.playing)rect(224,8,7,7,purple);
 }
 
 static const uint16_t waveColors[] = {RGB(53,44,100),RGB(28,72,105),RGB(85,39,92)};
