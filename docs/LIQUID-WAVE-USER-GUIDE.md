@@ -50,6 +50,15 @@ The sequencer has Intro, Verse, Chorus, Bridge, and Outro sections. Each section
 
 Outside Sound Edit, **ALGORITHM** adjusts the track's FM ratio or Beat Bear's drum drive. Knob tweaks last until power-off or until you change the instrument. Saved songs retain their patterns, tempo, harmonies, arrangement, mutes, selected track, and preset choices.
 
+## Give each section its own sound
+
+1. Open **EDIT**, then press **EDIT** again to open **SECTION SOUND**.
+2. Turn **KNOB 1** to choose Intro, Verse, Chorus, Bridge, or Outro. Turn **SELECT** to choose one of the eight tracks.
+3. Turn **KNOB 2** to select level, pitch, FM depth or drum drive, decay, FM ratio, or stereo pan. Turn **KNOB 3** to change the selected setting. **KNOB 4** always controls pan, and **ALGORITHM** adjusts the FM ratio on melodic tracks.
+4. Play a key to hear the selected section's settings, or press **PLAY** to hear them in the arrangement. Press **SAVE** while stopped to keep all section settings.
+
+Values are offsets from the track's base sound. Set an offset to zero to restore the base sound for that section. A change to the Chorus has no effect on the Verse. Stereo pan is most apparent through stereo headphones.
+
 ## Bluetooth MIDI
 
 The Bluetooth MIDI build advertises a MIDI endpoint after startup. Use the Bluetooth MIDI device picker in your host or music app to connect. Incoming note-on messages play the selected sound as a decaying hit. MIDI channel 10 triggers Beat Bear. Play with the panel or the sequencer while connected. The browser emulator does not model the Bluetooth radio.

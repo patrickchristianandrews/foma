@@ -16,7 +16,7 @@
 
 typedef struct { uint32_t magic; uint8_t style,bpm,sel,mute; uint8_t pat[NS][NC][16]; } Project;
 static Project p;
-enum {HOME, MIX, ENV, MOTION, EDIT, GLOBAL, FX, SEQ};
+enum {HOME, MIX, ENV, MOTION, EDIT, GLOBAL, FX, SEQ, SECTION_SOUND};
 static int page, cursor, octave, loopSection, repeat, transpose;
 static volatile int masterLevel=85;
 static uint8_t level[8]={85,85,85,85,85,85,85,85};
@@ -60,11 +60,16 @@ typedef struct {
  LiquidHarmony harmony;
 } SavedSong;
 
+typedef struct { int8_t level, pitch, depth, decay, ratio, pan; } SectionSound;
+typedef struct { SavedSong song; SectionSound sound[NS][NC]; } SavedMix;
+static SectionSound sectionMix[NS][NC];
+static int editSection, editParameter;
 static LiquidHarmony songHarmony;
+static const uint32_t MIX_MAGIC = 12347u;
 static const uint32_t SONG_MAGIC = 12346u;
 static const uint32_t LEGACY_MAGIC = 12345u;
 
-static const char *pageName[]={"STAGE","MIX","ENVELOPE","MOTION","SOUND EDIT","GLOBAL","FX","STEPS"};
+static const char *pageName[]={"STAGE","MIX","ENVELOPE","MOTION","SOUND EDIT","GLOBAL","FX","STEPS","SECTION SOUND"};
 static const char *knobGuide[]={"TEMPO  LEVEL  FM  TAIL","TEMPO  LEVEL  FM  TAIL","TEMPO  LEVEL  FM  TAIL","TEMPO  LEVEL  MOT  TAIL","TEMPO  LEVEL  FM  TAIL","TEMPO  OUT  KEY  OCT","TEMPO  LEVEL  DRIVE  TAIL","TEMPO  STEP  NOTE  LOOP"};
 static int clamp(int value,int low,int high){return value<low?low:value>high?high:value;}
 static int wrap(int value,int count){return (value%count+count)%count;}
@@ -77,11 +82,12 @@ static const uint16_t colors[8]={RGB(255,100,40),RGB(190,90,255),RGB(255,210,60)
 static const uint8_t vb[8]={0,0,1,4,5,8,9,10};
 static const uint8_t vn[8]={0,1,3,1,3,1,1,1};
 static volatile uint8_t head,tail;
-typedef struct {uint8_t voice,sh,drum,ratio;uint32_t inc;int32_t amp,idx;} Event;
+typedef struct {uint8_t voice,sh,drum,ratio;uint32_t inc;int32_t amp,idx;int8_t pan;} Event;
 static Event queue[64];
-typedef struct {uint32_t ph,mp,inc;int32_t env,idx;uint8_t sh,ratio;} Voice;
+typedef struct {uint32_t ph,mp,inc;int32_t env,idx;uint8_t sh,ratio;int8_t pan;} Voice;
 static Voice v[NV];
 static int32_t ke,se,he,prevNoise;static uint8_t drumTail=11; static uint32_t kp,ki,kbase,noise=0xA5A5A5A5u;
+static int8_t drumPan;
 static int playing,recording,pos,section,step,bar;
 static uint32_t due,remMs,active[8],lastFace,lastHud;
 static uint32_t bootStarted, lastWave;
@@ -91,15 +97,29 @@ static Face f[8]; static uint8_t faceIndex;
 static uint32_t rnd(uint32_t n){return n?random32()%n:0;}
 static void enqueue(Event e){uint8_t h=(head+1)&63;if(h==tail)return;queue[head]=e;head=h;}
 static int degree(int d){return scale[p.style==2?0:1][d%7]+12*(d/7);}
-static void sound_at_root(int ch,int d,int root){
+static void sound_at_root(int ch,int d,int root,int part){
+ const SectionSound *fx=&sectionMix[part][ch];
+ int volume=clamp(level[ch]+fx->level,0,100);
+ int decay=clamp(tails[ch]+fx->decay,ch?9:5,ch?17:14);
+ int shift=instrument(ch)->shift+transpose+octave*12+fx->pitch;
+ int depth=clamp(toneDepth[ch]+drive[ch]+fx->depth,0,120);
+ int8_t pan=(int8_t)(fx->pan*127/100);
  active[ch]=millis()+180;
- if(ch==0){Event e={0,(uint8_t)tails[0],(uint8_t)d,0,note_inc(68+instrument(0)->shift+transpose+octave*12),level[0]*240,drive[0]};enqueue(e);return;}
+ if(ch==0){
+  Event e={0,(uint8_t)decay,(uint8_t)d,0,note_inc(clamp(68+shift,0,127)),
+    volume*240,clamp(drive[0]+fx->depth,0,90),pan};
+  enqueue(e);
+  return;
+ }
  for(int j=0;j<vn[ch];j++){
- int note=60+root+12*octave+instrument(ch)->shift+transpose+degree(d+j*2);if(note>127)note=127;if(note<0)note=0;
- Event e={(uint8_t)(vb[ch]+j),(uint8_t)tails[ch],0,(uint8_t)(shape[ch]+1),note_inc(note),((ch==2||ch==4)?70:160)*level[ch],toneDepth[ch]+drive[ch]+(motion[ch]?(int)((millis()/40)%12)*motion[ch]/8:0)};enqueue(e);
+  int note=clamp(60+root+shift+degree(d+j*2),0,127);
+  int animate=motion[ch]?(int)((millis()/40)%12)*motion[ch]/8:0;
+  Event e={(uint8_t)(vb[ch]+j),(uint8_t)decay,0,(uint8_t)clamp(shape[ch]+1+fx->ratio,1,8),
+    note_inc(note),((ch==2||ch==4)?70:160)*volume,depth+animate,pan};
+  enqueue(e);
  }
 }
-static void sound(int ch, int d) { sound_at_root(ch, d, songHarmony.root); }
+static void sound(int ch,int d) { sound_at_root(ch,d,songHarmony.root,section); }
 #if FOMA_BLUETOOTH
 static void bluetooth_input(void) {
  uint8_t status,note,velocity;
@@ -112,31 +132,39 @@ static void bluetooth_input(void) {
    else {
     active[ch]=millis()+180;
     Event e={vb[ch],(uint8_t)tails[ch],0,(uint8_t)(shape[ch]+1),note_inc(note),
-      160*level[ch]*velocity/127,toneDepth[ch]+drive[ch]};
+      160*level[ch]*velocity/127,toneDepth[ch]+drive[ch],0};
     enqueue(e);
    }
   }
  }
 }
 #endif
+static void mix_sample(int32_t sample,int pan,int32_t *mono,int32_t *left,int32_t *right){
+ if(!pan){*mono+=sample;return;}
+ /* Constant gain on the near speaker; attenuate the opposite speaker. */
+ *left+=pan>0?(sample*(127-pan))/128:sample;
+ *right+=pan<0?(sample*(127+pan))/128:sample;
+}
 void audio(int32_t *out,uint32_t frames){
  while(tail!=head){Event e=queue[tail];tail=(tail+1)&63;
- if(e.drum){drumTail=e.sh;if(e.drum&1){ke=e.amp;ki=e.inc;kbase=e.inc/7;}if(e.drum&2)se=e.amp*3/4+e.idx*30;if(e.drum&12)he=e.amp/2+e.idx*20;}
- else {Voice *a=&v[e.voice];a->inc=e.inc;a->env=e.amp<<14;a->idx=e.idx;a->sh=e.sh;a->ratio=e.ratio;}}
+ if(e.drum){drumTail=e.sh;drumPan=e.pan;if(e.drum&1){ke=e.amp;ki=e.inc;kbase=e.inc/7;}if(e.drum&2)se=e.amp*3/4+e.idx*30;if(e.drum&12)he=e.amp/2+e.idx*20;}
+ else {Voice *a=&v[e.voice];a->inc=e.inc;a->env=e.amp<<14;a->idx=e.idx;a->sh=e.sh;a->ratio=e.ratio;a->pan=e.pan;}}
  for(uint32_t n=0;n<frames;n++){
- int32_t sum=0;
+ int32_t sum=0,left=0,right=0,drums=0;
  for(int j=0;j<NV;j++){Voice *a=&v[j];int32_t env=a->env>>14;if(env<8)continue;
  a->ph+=a->inc;a->mp+=a->inc*a->ratio;
  int32_t dep=(a->idx*env)>>15;
  uint32_t offset=(uint32_t)((int64_t)sine(a->mp)*dep*1304);
- sum+=(sine(a->ph+offset)*env)>>17;a->env-=a->env>>a->sh;}
+ mix_sample((sine(a->ph+offset)*env)>>17,a->pan,&sum,&left,&right);
+ a->env-=a->env>>a->sh;}
  noise^=noise<<13;noise^=noise>>17;noise^=noise<<5;int32_t nz=(int32_t)(noise>>17)-16384;
- if(ke>32){kp+=ki;ki-=(ki-kbase)>>9;sum+=(sine(kp)*ke)>>17;ke-=ke>>drumTail;}
- if(se>32){sum+=(nz*se)>>17;se-=se>>(drumTail-1);}
- if(he>32){sum+=((nz-prevNoise)*he)>>18;he-=he>>(drumTail-1);}prevNoise=nz;
- sum=sum*masterLevel/100;
- if(sum>24000){sum=24000;}if(sum< -24000){sum=-24000;}
- out[n*2]+=sum;out[n*2+1]+=sum;
+ if(ke>32){kp+=ki;ki-=(ki-kbase)>>9;drums+=(sine(kp)*ke)>>17;ke-=ke>>drumTail;}
+ if(se>32){drums+=(nz*se)>>17;se-=se>>(drumTail-1);}
+ if(he>32){drums+=((nz-prevNoise)*he)>>18;he-=he>>(drumTail-1);}prevNoise=nz;
+ mix_sample(drums,drumPan,&sum,&left,&right);
+ int volume=masterLevel;
+ out[n*2]+=clamp((sum+left)*volume/100,-24000,24000);
+ out[n*2+1]+=clamp((sum+right)*volume/100,-24000,24000);
  }
 }
 static void generate(void){
@@ -234,8 +262,40 @@ static void faceDraw(int i){
  portrait_at(i,a->x,a->y);
  a->ox=a->x;a->oy=a->y;
 }
+enum { PART_LEVEL, PART_PITCH, PART_DEPTH, PART_DECAY, PART_RATIO, PART_PAN, PART_PARAMS };
+static const char *partParams[]={"LEVEL","PITCH","FM / DRIVE","DECAY","FM RATIO","PAN"};
+static int8_t *part_value(SectionSound *part,int param){
+ switch(param){
+  case PART_LEVEL:return &part->level;
+  case PART_PITCH:return &part->pitch;
+  case PART_DEPTH:return &part->depth;
+  case PART_DECAY:return &part->decay;
+  case PART_RATIO:return &part->ratio;
+  default:return &part->pan;
+ }
+}
+static void tune_part(SectionSound *part,int param,int delta){
+ static const int limit[]={100,24,72,8,7,100};
+ int8_t *value=part_value(part,param);
+ *value=(int8_t)clamp(*value+delta,-limit[param],limit[param]);
+}
 static void hud(void){
- if(page!=HOME){
+ if(page==SECTION_SOUND){
+  SectionSound *part=&sectionMix[editSection][p.sel];
+  rect(0,48,240,145,BLACK);
+  text(8,49,sections[editSection],WHITE,FONT_SMALL);
+  text(117,49,names[p.sel],colors[p.sel],FONT_SMALL);
+  for(int i=0;i<PART_PARAMS;i++){
+   char value[12];
+   int y=68+i*16;
+   uint16_t ink=i==editParameter?RGB(255,190,237):WHITE;
+   text(8,y,i==editParameter?">":" ",ink,FONT_SMALL);
+   text(24,y,partParams[i],ink,FONT_SMALL);
+   if(i==PART_RATIO&&!p.sel)text(160,y,"-",ink,FONT_SMALL);
+   else {format_int(value,*part_value(part,i));text(160,y,value,ink,FONT_SMALL);}
+  }
+  text(8,170,"K3 ADJUST / K4 PAN",WHITE,FONT_SMALL);
+ }else if(page!=HOME){
   rect(0,48,240,145,BLACK);
   text(8,60,names[p.sel],colors[p.sel],FONT_SMALL);
   text(72,60,instrument(p.sel)->name,WHITE,FONT_SMALL);
@@ -248,25 +308,37 @@ static void hud(void){
  }
 
  rect(0,0,240,48,BLACK);text(0,0,"LIQUID WAVE",WHITE,FONT_SMALL);text(125,0,pageName[page],WHITE,FONT_SMALL);
- text(0,16,styles[p.style],WHITE,FONT_SMALL);char b[12];format_int(b,p.bpm);text(96,16,b,WHITE,FONT_SMALL);text(0,32,page==EDIT?"ALGORITHM: INSTRUMENT":!p.sel&&page!=GLOBAL&&page!=SEQ?"TEMPO  LEVEL DRIVE TAIL":knobGuide[page],WHITE,FONT_SMALL);
+ text(0,16,styles[p.style],WHITE,FONT_SMALL);char b[12];format_int(b,p.bpm);text(96,16,b,WHITE,FONT_SMALL);
+ const char *guide=page==SECTION_SOUND?"K1 SECTION / K2 PARAM":
+  page==EDIT?"ALGORITHM: INSTRUMENT":!p.sel&&page!=GLOBAL&&page!=SEQ?"TEMPO  LEVEL DRIVE TAIL":knobGuide[page];
+ text(0,32,guide,WHITE,FONT_SMALL);
  rect(0,194,240,46,BLACK);text(0,194,sections[section],WHITE,FONT_SMALL);
  text(96,194,names[p.sel],colors[p.sel],FONT_SMALL);text(192,194,recording?"REC":"",WHITE,FONT_SMALL);
  for(int i=0;i<16;i++){int d=p.pat[section][p.sel][i];uint16_t col=(p.sel?d!=EMPTY:d!=0)?colors[p.sel]:RGB(35,35,35);rect(i*15,218,12,12,col);if((playing&&i==step)||(page==SEQ&&i==cursor))frame(i*15,216,14,16,WHITE);}
 }
+static int load_song_settings(const SavedSong *saved,uint32_t magic){
+ const Project *project=&saved->session.project;
+ if(project->magic!=magic||project->style>=4||project->sel>=NC||project->bpm<60||project->bpm>180)return 0;
+ if(saved->harmony.root< -4||saved->harmony.root>5)return 0;
+ for(int s=0;s<NS;s++)for(int i=0;i<4;i++)if(saved->harmony.progression[s][i]>=7)return 0;
+ for(int i=0;i<LW_ARRANGEMENT;i++)if(saved->harmony.arrangement[i]>=NS)return 0;
+ p=*project;
+ songHarmony=saved->harmony;
+ for(int ch=0;ch<NC;ch++)chooseInstrument(ch,saved->session.presets[ch]);
+ return 1;
+}
 void setup(void){
  clear(BLACK);p.magic=LEGACY_MAGIC;p.style=0;p.sel=0;p.mute=0;generate();
+ SavedMix mixed;
  SavedSong full;
  SavedProject saved;
- if(settings_load(&full,sizeof(full))==0&&full.session.project.magic==SONG_MAGIC&&
-    full.session.project.style<4&&full.session.project.sel<8&&
-    full.session.project.bpm>=60&&full.session.project.bpm<=180){
-  int valid=full.harmony.root>=-4&&full.harmony.root<=5;
-  for(int s=0;s<NS;s++)for(int i=0;i<4;i++)valid &= full.harmony.progression[s][i]<7;
-  for(int i=0;i<LW_ARRANGEMENT;i++)valid &= full.harmony.arrangement[i]<NS;
-  if(valid){
-   p=full.session.project;songHarmony=full.harmony;
-   for(int ch=0;ch<NC;ch++)chooseInstrument(ch,full.session.presets[ch]);
+ if(settings_load(&mixed,sizeof(mixed))==0&&load_song_settings(&mixed.song,MIX_MAGIC)){
+  for(int s=0;s<NS;s++)for(int ch=0;ch<NC;ch++){
+   sectionMix[s][ch]=mixed.sound[s][ch];
+   for(int param=0;param<PART_PARAMS;param++)tune_part(&sectionMix[s][ch],param,0);
   }
+ }else if(settings_load(&full,sizeof(full))==0&&load_song_settings(&full,SONG_MAGIC)){
+  /* Earlier builds did not have per-section sound offsets. */
  }else if(settings_load(&saved,sizeof(saved))==0&&saved.project.magic==LEGACY_MAGIC&&saved.project.style<4&&saved.project.sel<8&&saved.project.bpm>=60&&saved.project.bpm<=180){
   p=saved.project;for(int ch=0;ch<NC;ch++)chooseInstrument(ch,saved.presets[ch]);
   liquid_song_legacy_harmony(p.style,&songHarmony);
@@ -310,7 +382,10 @@ void loop(void){
  if(button_pressed(BTN_SEL))p.mute^=1<<p.sel;
  if(button_pressed(BTN_ENV))page=ENV;
  if(button_pressed(BTN_LFO))page=MOTION;
- if(button_pressed(BTN_EDIT))page=EDIT;
+ if(button_pressed(BTN_EDIT)){
+  if(page==EDIT){page=SECTION_SOUND;editSection=section;editParameter=PART_LEVEL;}
+  else page=EDIT;
+ }
  if(button_pressed(BTN_GLO))page=GLOBAL;
  if(button_pressed(BTN_FX))page=FX;
  if(button_pressed(BTN_SEQ)){if(page==SEQ)repeat=!repeat;page=SEQ;loopSection=section;}
@@ -320,11 +395,12 @@ void loop(void){
  if(button_pressed(BTN_OCT_UP))octave=clamp(octave+1,-2,2);
  if(button_pressed(BTN_ARP)){generate();pos=0;due=now;}
  if(button_pressed(BTN_SAVE)&&!playing){
-  SavedSong saved={0};
-  saved.session.project=p;
-  saved.session.project.magic=SONG_MAGIC;
-  for(int ch=0;ch<NC;ch++)saved.session.presets[ch]=preset[ch];
-  saved.harmony=songHarmony;
+  SavedMix saved={0};
+  saved.song.session.project=p;
+  saved.song.session.project.magic=MIX_MAGIC;
+  for(int ch=0;ch<NC;ch++)saved.song.session.presets[ch]=preset[ch];
+  saved.song.harmony=songHarmony;
+  for(int s=0;s<NS;s++)for(int ch=0;ch<NC;ch++)saved.sound[s][ch]=sectionMix[s][ch];
   settings_save(&saved,sizeof(saved));
  }
  int d=encoder(ENC_SELECT);if(d){p.sel=(uint8_t)wrap(p.sel+d,8);if(page==HOME)page=MIX;}
@@ -332,17 +408,25 @@ void loop(void){
  int ch=p.sel;
  d=encoder(ENC_ALGORITHM);if(d){
   if(page==EDIT){chooseInstrument(ch,preset[ch]+d);if(!playing)sound(ch,ch?0:7);}
+  else if(page==SECTION_SOUND){if(ch)tune_part(&sectionMix[editSection][ch],PART_RATIO,d);}
   else if(ch)shape[ch]=(uint8_t)wrap(shape[ch]+d,8);
   else drive[0]=clamp(drive[0]+d,0,40);
  }
- d=encoder(ENC_KNOB1);if(d)p.bpm=(uint8_t)clamp(p.bpm+d,60,180);
+ d=encoder(ENC_KNOB1);if(d){
+  if(page==SECTION_SOUND)editSection=wrap(editSection+d,NS);
+  else p.bpm=(uint8_t)clamp(p.bpm+d,60,180);
+ }
  d=encoder(ENC_KNOB2);if(d){
   if(page==GLOBAL)masterLevel=clamp(masterLevel+d,0,100);
+  else if(page==SECTION_SOUND)editParameter=wrap(editParameter+d,PART_PARAMS);
   else if(page==SEQ)cursor=wrap(cursor+d,16);
   else level[ch]=(uint8_t)clamp(level[ch]+d,0,100);
  }
  d=encoder(ENC_KNOB3);if(d){
   if(page==GLOBAL)transpose=clamp(transpose+d,-12,12);
+  else if(page==SECTION_SOUND){
+   if(editParameter!=PART_RATIO || ch)tune_part(&sectionMix[editSection][ch],editParameter,d);
+  }
   else if(page==MOTION&&ch)motion[ch]=clamp(motion[ch]+d,0,32);
   else if(page==SEQ){
    uint8_t *note=&p.pat[section][ch][cursor];
@@ -352,6 +436,7 @@ void loop(void){
  }
  d=encoder(ENC_KNOB4);if(d){
   if(page==GLOBAL)octave=clamp(octave+d,-2,2);
+  else if(page==SECTION_SOUND)tune_part(&sectionMix[editSection][ch],PART_PAN,d);
   else if(page==SEQ){loopSection=wrap(loopSection+d,NS);section=loopSection;repeat=1;}
   else tails[ch]=clamp(tails[ch]+d,ch?9:5,ch?17:14);
  }
@@ -362,7 +447,8 @@ void loop(void){
    *note=ch?(*note==EMPTY?(uint8_t)kd:EMPTY):(*note?0:(uint8_t)kd);
    if(ch?*note!=EMPTY:*note)sound(ch,*note);
   }else{
-   sound(ch,kd);
+   if(page==SECTION_SOUND&&!recording)sound_at_root(ch,kd,songHarmony.root,editSection);
+   else sound(ch,kd);
    if(recording)p.pat[section][ch][playing?step:k%16]=(uint8_t)kd;
   }
  }
@@ -377,6 +463,6 @@ void loop(void){
  if(now-lastHud>=140){lastHud=now;hud();}
  led_button(BTN_PLAY,playing);led_button(BTN_REC,recording);
  led_button(BTN_HOME,page==HOME);led_button(BTN_SEQ,page==SEQ);led_button(BTN_FX,page==FX);
- led_button(BTN_ENV,page==ENV);led_button(BTN_LFO,page==MOTION);led_button(BTN_EDIT,page==EDIT);
+ led_button(BTN_ENV,page==ENV);led_button(BTN_LFO,page==MOTION);led_button(BTN_EDIT,page==EDIT||page==SECTION_SOUND);
  led_button(BTN_GLO,page==GLOBAL);led_button(BTN_SEL,(p.mute&(1<<p.sel))!=0);
 }

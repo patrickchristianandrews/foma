@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const wasm = await WebAssembly.compile(await readFile(process.argv[2]));
-const HOME = 8, SAVE = 9, ARP = 10, SEQ = 11, PLAY = 12, REC = 13;
-const SELECT = 0;
+const EDIT = 6, HOME = 8, SAVE = 9, ARP = 10, SEQ = 11, PLAY = 12, REC = 13;
+const SELECT = 0, KNOB1 = 2, KNOB4 = 5;
 const FRAME_LEN = 240 * 240;
 
 async function device(saved) {
@@ -35,6 +35,14 @@ async function device(saved) {
     turn(n, count) {
       panel.web_encoder(n, count);
       this.advance(15);
+    },
+    audition() {
+      panel.web_keys(1);
+      panel.web_keys(0);
+      this.advance(60);
+      const left = new Float32Array(panel.memory.buffer, panel.web_out_l(), 512);
+      const right = new Float32Array(panel.memory.buffer, panel.web_out_r(), 512);
+      return [left.some(value => value !== 0), right.some(value => value !== 0)];
     },
     led: n => Boolean(panel.web_led_buttons() & (1 << n)),
   };
@@ -68,9 +76,18 @@ assert(portraitColors.size >= 12, 'Tidbit is a full-color portrait on Steps');
 fm1.tap(REC);
 assert(fm1.led(REC), 'Record control');
 fm1.tap(REC);
+fm1.tap(EDIT);
+fm1.tap(EDIT);
+fm1.turn(KNOB1, 1);
+fm1.turn(KNOB4, -100);
+assert.deepEqual(fm1.audition(), [true,false], 'edited track pans hard left in Verse');
+fm1.advance(2500);
+fm1.turn(KNOB1, 1);
+assert.deepEqual(fm1.audition(), [true,true], 'the same track stays centered in Chorus');
 fm1.tap(SAVE);
 const first = fm1.store();
-assert.equal(new DataView(first.buffer).getUint32(0,true),12346,'new save contains arrangement');
+assert.equal(new DataView(first.buffer).getUint32(0,true),12347,'new save contains arrangement and section sound');
+assert.equal(new Int8Array(first.buffer)[688 + (8 + 7) * 6 + 5], -100, 'Verse pan persists');
 fm1.tap(ARP);
 fm1.tap(SAVE);
 assert.notDeepEqual(fm1.store(), first, 'New Song replaces the saved composition after SAVE');
@@ -84,6 +101,13 @@ const rebooted = await device(first);
 rebooted.tap(HOME);
 rebooted.tap(SAVE);
 assert.deepEqual(rebooted.store(), first, 'full song and instrument settings survive reboot');
+const earlierDraft = first.slice(0,688);
+new DataView(earlierDraft.buffer).setUint32(0,12346,true);
+const older = await device(earlierDraft);
+older.tap(HOME);
+older.tap(SAVE);
+assert.deepEqual(older.store().slice(4,688), earlierDraft.slice(4), 'prior draft retains arrangement and instruments');
+assert(older.store().slice(688).every(value => value === 0), 'prior draft starts with neutral section sounds');
 const legacy = first.slice(0, 656);
 new DataView(legacy.buffer).setUint32(0,12345,true);
 const migrated = await device(legacy);
