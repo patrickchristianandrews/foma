@@ -17,7 +17,7 @@
 
 typedef struct { uint32_t magic; uint8_t style,bpm,sel,mute; uint8_t pat[NS][NC][16]; } Project;
 static Project p;
-enum {HOME, MIX, ENV, MOTION, EDIT, GLOBAL, FX, SEQ, SECTION_SOUND, WEATHER};
+enum {HOME, MIX, ENV, MOTION, EDIT, GLOBAL, FX, SEQ, SECTION_SOUND, WEATHER, SONG_DETAILS, RADIO};
 static int page, cursor, octave, loopSection, repeat, transpose;
 static volatile int masterLevel=85;
 static uint8_t level[8]={85,85,85,85,85,85,85,85};
@@ -500,7 +500,44 @@ static void tune_part(SectionSound *part,int param,int delta){
  int8_t *value=part_value(part,param);
  *value=(int8_t)clamp(*value+delta,-limit[param],limit[param]);
 }
+static void song_details_hud(void){
+ char value[12];
+ static const char *keys[]={"C","C#","D","D#","E","F","F#","G","G#","A","A#","B"};
+ static const char *degrees[]={"I","II","III","IV","V","VI","VII"};
+ static const char *shortSection[]={"I","V","C","B","O"};
+ rect(0,0,240,240,BLACK);
+ text(8,5,"3 / RANDOM SONG",RGB(183,137,235),FONT_SMALL);
+ text(8,24,styles[p.style],WHITE,FONT_SMALL);
+ format_int(value,p.bpm);text(94,24,value,WHITE,FONT_SMALL);text(126,24,"BPM",WHITE,FONT_SMALL);
+ text(174,24,keys[wrap(songHarmony.root,12)],WHITE,FONT_SMALL);
+ text(8,42,p.style==2?"MAJOR / 32 BARS":"MINOR / 32 BARS",WHITE,FONT_SMALL);
+ for(int i=0;i<NS;i++){
+  int y=64+i*19;
+  text(8,y,sections[i],WHITE,FONT_SMALL);
+  for(int j=0;j<4;j++)text(98+j*33,y,degrees[songHarmony.progression[i][j]%7],colors[i],FONT_SMALL);
+ }
+ text(8,161,"ARRANGEMENT (4 BARS EACH)",WHITE,FONT_SMALL);
+ for(int i=0;i<8;i++){
+  int x=9+i*29;
+  frame(x,180,25,18,playing&&pos/64==i?WHITE:colors[songHarmony.arrangement[i]]);
+  text(x+7,182,shortSection[songHarmony.arrangement[i]],WHITE,FONT_SMALL);
+ }
+ text(8,205,playing?"PLAYING / PLAY STOP":"STOPPED / PLAY START",WHITE,FONT_SMALL);
+ text(8,222,"ARP NEW / HOME RADIO",WHITE,FONT_SMALL);
+}
+static void radio_hud(void){
+ rect(0,0,240,240,BLACK);
+ text(8,5,"4 / ONLINE RADIO",RGB(103,212,250),FONT_SMALL);
+ text(8,36,"INTERNET RADIO",WHITE,FONT_BIG);
+ text(8,80,"NETWORK NOT AVAILABLE",WHITE,FONT_SMALL);
+ text(8,101,"Native Wi-Fi and stream",WHITE,FONT_SMALL);
+ text(8,118,"decoder not connected.",WHITE,FONT_SMALL);
+ text(8,159,"No station is playing.",WHITE,FONT_SMALL);
+ text(8,222,"HOME / RETURN TO STAGE",WHITE,FONT_SMALL);
+}
 static void hud(void){
+ if(page==SONG_DETAILS){song_details_hud();return;}
+ if(page==RADIO){radio_hud();return;}
  if(page==WEATHER){weather_hud(millis());return;}
  if(page==SECTION_SOUND){
   SectionSound *part=&sectionMix[editSection][p.sel];
@@ -655,9 +692,11 @@ void loop(void){
   ambientLevel=animalLevel=animalTrigger=0;
   weather.playing=0;
   weather.octHeld=0;
-  page=MIX; /* The existing HOME handler below returns to Stage. */
+  page=SONG_DETAILS;
+  song_details_hud();lastHud=now;return;
  }
  if(button_pressed(BTN_HOME)){
+  if(page==SONG_DETAILS){page=RADIO;radio_hud();lastHud=now;return;}
   if(page==HOME&&!skippedBoot){
    page=WEATHER;
    weather_hud(now);
@@ -668,6 +707,11 @@ void loop(void){
   clear(BLACK);
   stage_waves(now);
   for(int i=0;i<NC;i++)faceDraw(i);
+ }
+ if(page==RADIO){
+  if(now-lastHud>=1000){lastHud=now;radio_hud();}
+  int catchup=0;while(playing&&(int32_t)(now-due)>=0&&catchup++<4){transport();due+=15000/p.bpm;remMs+=15000%p.bpm;if(remMs>=p.bpm){remMs-=p.bpm;due++;}}
+  led_button(BTN_HOME,1);led_button(BTN_PLAY,playing);return;
  }
  if(button_pressed(BTN_SEL))p.mute^=1<<p.sel;
  if(button_pressed(BTN_ENV))page=ENV;
@@ -756,7 +800,7 @@ void loop(void){
  }
  if(now-lastHud>=140){lastHud=now;hud();}
  led_button(BTN_PLAY,playing);led_button(BTN_REC,recording);
- led_button(BTN_HOME,page==HOME);led_button(BTN_SEQ,page==SEQ);led_button(BTN_FX,page==FX);
+ led_button(BTN_HOME,page==HOME||page==SONG_DETAILS);led_button(BTN_SEQ,page==SEQ);led_button(BTN_FX,page==FX);
  led_button(BTN_ENV,page==ENV);led_button(BTN_LFO,page==MOTION);led_button(BTN_EDIT,page==EDIT||page==SECTION_SOUND);
  led_button(BTN_GLO,page==GLOBAL);led_button(BTN_SEL,(p.mute&(1<<p.sel))!=0);
 }
