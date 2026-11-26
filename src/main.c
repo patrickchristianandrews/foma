@@ -84,6 +84,12 @@ static const uint8_t vb[8]={0,0,1,4,5,8,9,10};
 static const uint8_t vn[8]={0,1,3,1,3,1,1,1};
 static volatile uint8_t head,tail;
 static volatile uint8_t releaseRequested;
+/* Weather-only procedural ambience: disabled by default, no cat samples. */
+static volatile uint8_t ambientLevel, animalLevel, ambientMode;
+static volatile uint8_t animalTrigger;
+static uint32_t animalPhase, animalRemaining;
+static int32_t ambientLow, thunderEnv;
+static uint32_t ambientRng=0x9e3779b9u;
 typedef struct {uint8_t voice,sh,drum,ratio;uint32_t inc;int32_t amp,idx;int8_t pan;} Event;
 static Event queue[64];
 typedef struct {uint32_t ph,mp,inc;int32_t env,idx;uint8_t sh,ratio;int8_t pan;} Voice;
@@ -175,6 +181,27 @@ void audio(int32_t *out,uint32_t frames){
  if(se>32){drums+=(nz*se)>>17;se-= (se>>(drumTail-1)) ? (se>>(drumTail-1)) : 1;}
  if(he>32){drums+=((nz-prevNoise)*he)>>18;he-= (he>>(drumTail-1)) ? (he>>(drumTail-1)) : 1;}prevNoise=nz;
  mix_sample(drums,drumPan,&sum,&left,&right);
+ /* Separate optional weather ambience and dog/bird calls. */
+ if(ambientLevel||animalLevel||animalRemaining){
+  ambientRng^=ambientRng<<13;ambientRng^=ambientRng>>17;ambientRng^=ambientRng<<5;
+  int32_t white=(int32_t)(ambientRng>>17)-16384;
+  ambientLow+=(white-ambientLow)/128;
+  if(ambientLevel){
+   int32_t texture=ambientMode==2?ambientLow*3:ambientMode==1?(white-ambientLow)/3:(white-ambientLow)/6;
+   if(ambientMode==3){if((ambientRng&0x1ffffu)==0)thunderEnv=12000;texture+=ambientLow*(thunderEnv/256)/16;if(thunderEnv>0)thunderEnv--;}
+   sum+=texture*ambientLevel/400;
+  }
+  if(animalTrigger){animalTrigger=0;animalRemaining=12000;animalPhase=0;}
+  if(animalRemaining){
+   uint32_t elapsed=12000-animalRemaining;
+   uint32_t hz=ambientMode==2?1100+elapsed/32:180+animalRemaining/80;
+   animalPhase+=hz*97391u;
+   int32_t envelope=(int32_t)(animalRemaining<6000?animalRemaining:12000-animalRemaining);
+   int32_t call=(sine(animalPhase)/8+(ambientMode==2?0:white/5))*envelope/6000;
+   sum+=call*animalLevel/100;
+   animalRemaining--;
+  }
+ }
  int volume=masterLevel;
  out[n*2]+=clamp((sum+left)*volume/100,-24000,24000);
  out[n*2+1]+=clamp((sum+right)*volume/100,-24000,24000);
@@ -327,7 +354,9 @@ static void weather_hud(uint32_t now){
   text(8,205,liquid_weather_condition(code),WHITE,FONT_SMALL);
   format_int(value,weather.reading.temperature10/10);text(185,205,value,WHITE,FONT_SMALL);text(210,205,"C",peach,FONT_SMALL);
  }else text(8,205,moon?"LUNAR MODE":weather.available?"STALE / DEMO":"OFFLINE / DEMO",WHITE,FONT_SMALL);
- text(8,222,"HOME STAGE / PLAY JAM",peach,FONT_SMALL);
+ text(8,222,"ENV AMB / FX MODE / SEL",peach,FONT_SMALL);
+ if(ambientLevel)text(8,35,"AMB",purple,FONT_SMALL);
+ if(animalLevel)text(34,35,"CALL",purple,FONT_SMALL);
  if(weather.playing)rect(224,8,7,7,purple);
 }
 
@@ -572,6 +601,12 @@ void loop(void){
     }
     lastHud=now-1000u;
    }
+   /* Dedicated weather controls: FX cycles texture, ENV toggles ambience,
+      LFO toggles dog/wildlife level, SEL auditions the selected call. */
+   if(button_pressed(BTN_FX))ambientMode=(ambientMode+1)%4;
+   if(button_pressed(BTN_ENV))ambientLevel=ambientLevel?0:35;
+   if(button_pressed(BTN_LFO))animalLevel=animalLevel?0:45;
+   if(button_pressed(BTN_SEL)){if(!animalLevel)animalLevel=45;animalTrigger=1;}
    if(weather.playing){
     static const int8_t whiteKey[]={0,-1,1,-1,2,-1,3,4,-1,5,-1,6};
     int root=weather.harmony.root+weather.music.transpose;
@@ -590,6 +625,7 @@ void loop(void){
    return;
   }
   if(weather.playing)releaseRequested=1;
+  ambientLevel=animalLevel=animalTrigger=0;
   weather.playing=0;
   weather.octHeld=0;
   page=MIX; /* The existing HOME handler below returns to Stage. */
