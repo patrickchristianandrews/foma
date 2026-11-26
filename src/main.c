@@ -262,6 +262,16 @@ static void weather_transport(uint32_t now){
  weather.nextStep=now+15000u/weather.music.bpm;
 }
 
+/* Preserve the original portrait; animate only the muzzle on note attacks.
+ * Three mouth shapes follow the same note activity used by the stage. */
+static void tidbit_mouth(int x,int y,int scale,int hit,uint32_t now){
+ if(!hit)return;
+ int phase=(int)((now/55u)%3u);
+ int height=phase==1?3:2;
+ uint16_t dark=RGB(42,19,30), tongue=RGB(233,116,148);
+ rect(x+11*scale,y+11*scale,4*scale,height*scale,dark);
+ if(height==3)rect(x+12*scale,y+13*scale,2*scale,scale,tongue);
+}
 static void weather_hud(uint32_t now){
  const uint16_t peach=RGB(255,174,117), purple=RGB(183,137,235), dim=RGB(103,66,76);
  const uint16_t sky=RGB(18,17,37);
@@ -301,6 +311,7 @@ static void weather_hud(uint32_t now){
   uint16_t c=tidbitPortrait[y*24+x];
   if(c)rect(98+x*3,96+y*3,3,3,c);
  }
+ tidbit_mouth(98,96,3,(int32_t)(active[7]-now)>0 && !(p.mute&(1<<7)),now);
  /* Plant, record player, mug and books. */
  rect(199,136,17,14,purple);
  line(207,136,207,116,purple);line(207,128,198,119,purple);
@@ -375,7 +386,7 @@ static void portrait_at(int i,int x,int y){
    uint16_t color=tidbitPortrait[row*24+tx];
    if(color)pixel(x+tx,y+row,muted?(uint16_t)((color&0xf7deu)>>1):color);
   }
-  if(hit&&!muted)line(x+4,y+18,x+19,y+18,RGB(255,170,225));
+  tidbit_mouth(x,y,1,hit&&!muted,millis());
   if(i==p.sel)frame(x-1,y-1,26,20,WHITE);
   return;
  }
@@ -544,7 +555,7 @@ void loop(void){
     transport();due+=15000/p.bpm;remMs+=15000%p.bpm;
     if(remMs>=p.bpm){remMs-=p.bpm;due++;}
    }
-   if(now-lastHud>=1000){lastHud=now;weather_hud(now);}
+   if(now-lastHud>=70){lastHud=now;weather_hud(now);}
    led_button(BTN_HOME,1);
    led_button(BTN_PLAY,weather.playing||playing);
    return;
