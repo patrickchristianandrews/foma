@@ -287,6 +287,8 @@ void midi_send(uint8_t status, uint8_t d1, uint8_t d2) {
 }
 
 /* ---- time */
+static int battBars=-1;
+int battery_bars(void) { return battBars; }
 uint32_t millis(void) { return fm1_ms; }
 uint32_t micros(void) { return fm1_micros(); }
 
@@ -477,6 +479,18 @@ static void platform_poll(void) {
   }
   if (fm1_ms >= 30000u && bootguard.pending) {
     bootguard_clear(&bootguard); /* 30 s up: this firmware boots */
+  }
+  static uint32_t battLast;
+  static int32_t battAvg;
+  if(fm1_ms-battLast>=1000u){
+    battLast=fm1_ms;
+    int32_t sample=fm1_adc_read(FM1_ADC_BATT);
+    if(sample>=0){
+      if(!battAvg)battAvg=sample*16;
+      else battAvg+=(sample*16-battAvg)/8;
+      int32_t v=battAvg/16;
+      battBars=v<531?0:v<561?1:v<591?2:3;
+    }
   }
   if ((a = fm1_adc_read(FM1_ADC_MASTER)) >= 0) {
     uint32_t k10;
