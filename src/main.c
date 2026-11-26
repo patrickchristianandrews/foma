@@ -335,6 +335,14 @@ static void tidbit_mouth(int x,int y,int scale,int hit,uint32_t now){
  rect(x+11*scale,y+11*scale,4*scale,height*scale,dark);
  if(height==3)rect(x+12*scale,y+13*scale,2*scale,scale,tongue);
 }
+static void battery_hud(void){
+ int n=battery_bars();
+ rect(207,0,33,18,BLACK);
+ frame(208,3,28,12,WHITE);rect(236,6,3,6,WHITE);
+ if(n<0){text(219,1,"?",WHITE,FONT_SMALL);return;}
+ for(int i=0;i<n;i++)rect(211+i*8,6,6,6,n==1?RGB(255,155,65):RGB(100,220,150));
+ if(n==0)rect(211,6,2,6,RGB(255,70,70));
+}
 static void weather_hud(uint32_t now){
  const uint16_t peach=RGB(255,174,117), purple=RGB(183,137,235), dim=RGB(103,66,76);
  const uint16_t sky=RGB(18,17,37);
@@ -411,7 +419,8 @@ static void weather_hud(uint32_t now){
  text(8,222,"K1 SKY K2 HR K3 C K4 WIND",peach,FONT_SMALL);
  if(ambientLevel)text(8,35,"AMB",purple,FONT_SMALL);
  if(animalLevel)text(34,35,"CALL",purple,FONT_SMALL);
- if(weather.playing)rect(224,8,7,7,purple);
+ if(weather.playing)rect(196,8,7,7,purple);
+ battery_hud();
 }
 
 static const uint16_t waveColors[] = {RGB(28,72,105),RGB(42,124,157),RGB(103,212,250)};
@@ -658,7 +667,7 @@ static void song_details_hud(void){
   text(x+7,182,shortSection[songHarmony.arrangement[i]],WHITE,FONT_SMALL);
  }
  text(8,205,playing?"PLAYING / PLAY STOP":"STOPPED / PLAY START",WHITE,FONT_SMALL);
- text(8,222,"ARP NEW / HOME RADIO",WHITE,FONT_SMALL);
+ text(8,222,"ARP NEW / HOME RADIO",WHITE,FONT_SMALL);battery_hud();
 }
 static void radio_hud(void){
  rect(0,0,240,240,BLACK);
@@ -668,7 +677,7 @@ static void radio_hud(void){
  text(8,101,"Native Wi-Fi and stream",WHITE,FONT_SMALL);
  text(8,118,"decoder not connected.",WHITE,FONT_SMALL);
  text(8,159,"No station is playing.",WHITE,FONT_SMALL);
- text(8,222,"HOME / RETURN TO STAGE",WHITE,FONT_SMALL);
+ text(8,222,"HOME / RETURN TO STAGE",WHITE,FONT_SMALL);battery_hud();
 }
 static void hud(void){
  if(page==SONG_DETAILS){song_details_hud();return;}
@@ -704,7 +713,7 @@ static void hud(void){
   if(page==SEQ)for(int i=0;i<NC;i++)portrait_at(i,3+30*i,151);
  }
 
- rect(0,0,240,48,BLACK);text(0,0,"LIQUID WAVE",WHITE,FONT_SMALL);text(125,0,pageName[page],WHITE,FONT_SMALL);
+ rect(0,0,240,48,BLACK);text(0,0,"LIQUID WAVE",WHITE,FONT_SMALL);text(125,0,pageName[page],WHITE,FONT_SMALL);battery_hud();
  text(0,16,styles[p.style],WHITE,FONT_SMALL);char b[12];format_int(b,p.bpm);text(96,16,b,WHITE,FONT_SMALL);
  const char *guide=page==SECTION_SOUND?"K1 SECTION / K2 PARAM":
   page==FX?"K2 PARAM / K3 VALUE":page==ENV?"K2 ATTACK / K4 TAIL":page==MOTION?"K2 RATE / K3 DEPTH":page==EDIT?"ALGORITHM: INSTRUMENT":!p.sel&&page!=GLOBAL&&page!=SEQ?"TEMPO  LEVEL DRIVE TAIL":knobGuide[page];
