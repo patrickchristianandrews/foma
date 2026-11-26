@@ -499,9 +499,9 @@ void loop(void){
    if(button_pressed(BTN_OCT_DOWN)){weather_select(weather.back);lastHud=now-1000u;}
    if(button_pressed(BTN_PLAY)){
     if(weather.playing)weather.playing=0;
+    else if(playing)playing=0;
     else if(weather.place==LIQUID_MOON||weather_fresh(now)){
      weather.playing=1;
-     playing=0;
      weather.nextStep=now;
      weather.step=0;
     }

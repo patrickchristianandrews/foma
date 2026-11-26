@@ -124,7 +124,14 @@ assert.deepEqual(migrated.store().slice(4,656), legacy.slice(4), 'legacy steps a
 
 const weather = await device(first);
 weather.advance(850);
+weather.tap(PLAY);
+assert(weather.led(PLAY), 'Stage starts before switching to Weather');
 weather.tap(HOME);
+assert(weather.led(PLAY), 'entering Weather lets the Stage song keep playing');
+weather.tap(PLAY);
+assert(!weather.led(PLAY), 'PLAY stops the Stage song from Weather even without a reading');
+weather.advance(3000);
+assert(!weather.advance(250), 'Stage playback stays stopped after its sound has decayed');
 const weatherHome = weather.frame();
 weather.tap(PLAY);
 assert(!weather.led(PLAY), 'weather mode waits for live data on Earth');
