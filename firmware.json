@@ -3,5 +3,5 @@
   "version": "0.1",
   "identity": "FM-1_96",
   "platform": "felucca",
-  "options": {"usb_audio": false, "trs_midi": false, "midi_clock": false, "bluetooth": false}
+  "options": {"usb_audio": false, "trs_midi": false, "midi_clock": false, "bluetooth": true}
 }

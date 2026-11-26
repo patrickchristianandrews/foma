@@ -1,5 +1,7 @@
 name: Pocket Wave firmware
 on:
+  pull_request:
+    branches: [main]
   push:
     branches: [main]
     paths: ['src/**', 'firmware.json', 'tools/package_pocket_wave.py', 'tools/package_dx7.py', '.github/workflows/pocket-wave.yml']
@@ -12,6 +14,10 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+      - name: Compare firmware composition with the browser generator
+        run: |
+          cc -std=c11 -Wall -Wextra -Werror -Isrc src/liquid_song.c tests/song-parity.c -o /tmp/liquid-song-parity
+          /tmp/liquid-song-parity
       - name: Build firmware and emulator (same command as ./fm1 build)
         run: docker run --rm --init --platform linux/amd64 -u "$(id -u):$(id -g)" -v "$PWD:/work" konsumer/foma-toolchain python3 tools/build.py
       - name: Require a compiled firmware package
@@ -28,6 +34,7 @@ jobs:
             build/RELEASE-NOTES.md
           if-no-files-found: error
       - name: Publish a prerelease with plain download links
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
