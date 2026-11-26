@@ -1,0 +1,93 @@
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+
+const wasm = await WebAssembly.compile(await readFile(process.argv[2]));
+const HOME = 8, SAVE = 9, ARP = 10, SEQ = 11, PLAY = 12, REC = 13;
+const SELECT = 0;
+const FRAME_LEN = 240 * 240;
+
+async function device(saved) {
+  const panel = (await WebAssembly.instantiate(wasm)).exports;
+  if (saved) {
+    new Uint8Array(panel.memory.buffer, panel.web_store(), saved.length).set(saved);
+    panel.web_store_set_len(saved.length);
+  }
+  panel.web_boot();
+  return {
+    frame: () => new Uint16Array(panel.memory.buffer, panel.web_fb(), FRAME_LEN).slice(),
+    store: () => new Uint8Array(panel.memory.buffer, panel.web_store(), panel.web_store_len()).slice(),
+    advance(ms) {
+      let audible = false;
+      const due = panel.web_now() + ms;
+      while (panel.web_now() < due) {
+        panel.web_render(512);
+        const left = new Float32Array(panel.memory.buffer, panel.web_out_l(), 512);
+        assert(left.every(Number.isFinite), 'finite audio');
+        audible ||= left.some(value => value !== 0);
+      }
+      return audible;
+    },
+    tap(n) {
+      panel.web_buttons(1 << n);
+      panel.web_buttons(0);
+      this.advance(15);
+    },
+    turn(n, count) {
+      panel.web_encoder(n, count);
+      this.advance(15);
+    },
+    led: n => Boolean(panel.web_led_buttons() & (1 << n)),
+  };
+}
+
+const fm1 = await device();
+const startup = fm1.frame();
+assert(!fm1.led(HOME));
+fm1.advance(350);
+assert.notDeepEqual(fm1.frame(), startup, 'boot wave moves across the screen');
+fm1.advance(500);
+assert(fm1.led(HOME), 'boot enters Stage');
+const stage = fm1.frame();
+fm1.advance(110);
+const waves = fm1.frame();
+for (const row of [76,117,158]) {
+  const y0 = (row - 8) * 240;
+  const y1 = (row + 8) * 240;
+  assert.notDeepEqual(waves.subarray(y0,y1), stage.subarray(y0,y1), 'each wave band animates');
+}
+
+fm1.turn(SELECT, 7);
+fm1.tap(SEQ);
+assert(fm1.led(SEQ), 'Steps page opens');
+fm1.advance(160);
+const tidbit = fm1.frame();
+const portraitColors = new Set();
+for (let y = 151; y < 169; ++y)
+  for (let x = 213; x < 237; ++x) portraitColors.add(tidbit[y*240+x]);
+assert(portraitColors.size >= 12, 'Tidbit is a full-color portrait on Steps');
+fm1.tap(REC);
+assert(fm1.led(REC), 'Record control');
+fm1.tap(REC);
+fm1.tap(SAVE);
+const first = fm1.store();
+assert.equal(new DataView(first.buffer).getUint32(0,true),12346,'new save contains arrangement');
+fm1.tap(ARP);
+fm1.tap(SAVE);
+assert.notDeepEqual(fm1.store(), first, 'New Song replaces the saved composition after SAVE');
+fm1.tap(PLAY);
+assert(fm1.led(PLAY), 'Play control');
+assert(fm1.advance(1000), 'generated song produces audio');
+fm1.tap(PLAY);
+assert(!fm1.led(PLAY), 'Stop control');
+
+const rebooted = await device(first);
+rebooted.tap(HOME);
+rebooted.tap(SAVE);
+assert.deepEqual(rebooted.store(), first, 'full song and instrument settings survive reboot');
+const legacy = first.slice(0, 656);
+new DataView(legacy.buffer).setUint32(0,12345,true);
+const migrated = await device(legacy);
+migrated.tap(HOME);
+migrated.tap(SAVE);
+assert.deepEqual(migrated.store().slice(4,656), legacy.slice(4), 'legacy steps and presets survive migration');
+console.log('FM-1 emulator boot, wave layers, Tidbit, transport, audio, and saved-project checks passed.');

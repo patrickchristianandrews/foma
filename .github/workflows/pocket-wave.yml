@@ -22,6 +22,8 @@ jobs:
         run: docker run --rm --init --platform linux/amd64 -u "$(id -u):$(id -g)" -v "$PWD:/work" konsumer/foma-toolchain python3 tools/build.py
       - name: Require a compiled firmware package
         run: test -s build/web/firmware.fwsc
+      - name: Test controls and saved songs in the compiled FM-1 emulator
+        run: node tests/firmware-smoke.mjs build/web/firmware.wasm
       - name: Package everything (installer first, firmware, emulator, DX7 banks, source, browser toy)
         run: python3 tools/package_pocket_wave.py
       - name: Keep the files with this run
