@@ -726,7 +726,7 @@ void loop(void){
   weather.playing=0;
   weather.octHeld=0;
   page=SONG_DETAILS;
-  song_details_hud();lastHud=now;return;
+  song_details_hud();lastHud=now;led_button(BTN_PLAY,playing);return;
  }
  if(button_pressed(BTN_HOME)){
   if(page==SONG_DETAILS){page=RADIO;radio_hud();lastHud=now;return;}
