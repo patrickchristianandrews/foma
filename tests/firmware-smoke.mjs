@@ -65,13 +65,13 @@ assert(fm1.led(HOME), 'boot enters Stage');
 const stage = fm1.frame();
 fm1.advance(110);
 const waves = fm1.frame();
-for (const row of [56,67,78]) {
-  const y0 = (row - 8) * 240;
-  const y1 = (row + 8) * 240;
-  assert.notDeepEqual(waves.subarray(y0,y1), stage.subarray(y0,y1), 'each wave band animates');
-}
-
+fm1.advance(1600);
+const planeA=fm1.frame();
+fm1.advance(400);
+const planeB=fm1.frame();
+assert.notDeepEqual(planeA.subarray(48*240,90*240),planeB.subarray(48*240,90*240),'banner plane moves across the upper sky');
 assert.notDeepEqual(waves.subarray(120*240,170*240),stage.subarray(120*240,170*240),'swimmers animate around foreground waterline');
+
 fm1.turn(SELECT, 7);
 fm1.tap(SEQ);
 assert(fm1.led(SEQ), 'Steps page opens');
