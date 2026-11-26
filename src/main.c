@@ -47,6 +47,13 @@ static const Instrument kits[]={
 #define COUNT(a) ((int)(sizeof(a)/sizeof((a)[0])))
 static uint8_t preset[NC]={0,0,6,24,18,30,33,9};
 static int motion[8], drive[8];
+static uint8_t lfoRate[8]={4,4,4,4,4,4,4,4};
+static uint8_t attackMs[8];
+static volatile uint8_t fxDelay,fxReverb,fxChorus,fxFilter;
+static int fxParameter;
+static int16_t echoL[4096],echoR[4096];
+static unsigned echoPos;
+static int32_t filterL,filterR;
 static int wrap(int value,int count);
 static const Instrument *instrument(int ch){return ch?&instruments[preset[ch]]:&kits[preset[ch]];}
 static void chooseInstrument(int ch,int id){
@@ -92,7 +99,7 @@ static int32_t ambientLow, thunderEnv;
 static uint32_t ambientRng=0x9e3779b9u;
 typedef struct {uint8_t voice,sh,drum,ratio;uint32_t inc;int32_t amp,idx;int8_t pan;} Event;
 static Event queue[64];
-typedef struct {uint32_t ph,mp,inc;int32_t env,idx;uint8_t sh,ratio;int8_t pan;} Voice;
+typedef struct {uint32_t ph,mp,inc;int32_t env,idx;uint8_t sh,ratio;int8_t pan;uint32_t age,attack;} Voice;
 static Voice v[NV];
 static int32_t ke,se,he,prevNoise;static uint8_t drumTail=11; static uint32_t kp,ki,kbase,noise=0xA5A5A5A5u;
 static int8_t drumPan;
@@ -130,7 +137,7 @@ static void sound_at_root(int ch,int d,int root,int part,int style,int gain){
  }
  for(int j=0;j<vn[ch];j++){
   int note=clamp(60+root+shift+degree(d+j*2,style),0,127);
-  int animate=motion[ch]?(int)((millis()/40)%12)*motion[ch]/8:0;
+  int animate=motion[ch]?((int)sine(millis()* (uint32_t)(lfoRate[ch]+1)*429497u)*motion[ch])/32768:0;
   Event e={(uint8_t)(vb[ch]+j),(uint8_t)decay,0,(uint8_t)clamp(shape[ch]+1+fx->ratio,1,8),
     note_inc(note),((ch==2||ch==4)?70:160)*volume,depth+animate,pan};
   enqueue(e);
@@ -165,7 +172,7 @@ static void mix_sample(int32_t sample,int pan,int32_t *mono,int32_t *left,int32_
 void audio(int32_t *out,uint32_t frames){
  while(tail!=head){Event e=queue[tail];tail=(tail+1)&63;
  if(e.drum){drumTail=e.sh;drumPan=e.pan;if(e.drum&1){ke=e.amp;ki=e.inc;kbase=e.inc/7;}if(e.drum&2)se=e.amp*3/4+e.idx*30;if(e.drum&12)he=e.amp/2+e.idx*20;}
- else {Voice *a=&v[e.voice];a->inc=e.inc;a->env=e.amp<<14;a->idx=e.idx;a->sh=e.sh;a->ratio=e.ratio;a->pan=e.pan;}}
+ else {Voice *a=&v[e.voice];a->inc=e.inc;a->env=e.amp<<14;a->idx=e.idx;a->sh=e.sh;a->ratio=e.ratio;a->pan=e.pan;a->age=0;int ch=1;for(int j=1;j<NC;j++)if(e.voice>=vb[j]&&e.voice<vb[j]+vn[j]){ch=j;break;}a->attack=(uint32_t)attackMs[ch]*44u;}}
  /* Stop releases active voices smoothly on the audio thread. */
  if(releaseRequested){releaseRequested=0;for(int j=0;j<NV;j++)if(v[j].sh>10)v[j].sh=10;if(drumTail>10)drumTail=10;}
  for(uint32_t n=0;n<frames;n++){
@@ -174,7 +181,9 @@ void audio(int32_t *out,uint32_t frames){
  a->ph+=a->inc;a->mp+=a->inc*a->ratio;
  int32_t dep=(a->idx*env)>>15;
  uint32_t offset=(uint32_t)((int64_t)sine(a->mp)*dep*1304);
- mix_sample((sine(a->ph+offset)*env)>>17,a->pan,&sum,&left,&right);
+ int32_t signal=(sine(a->ph+offset)*env)>>17;
+ if(a->age<a->attack){signal=signal*(int32_t)(a->age/16)/(int32_t)(a->attack/16+1);a->age++;}
+ mix_sample(signal,a->pan,&sum,&left,&right);
  a->env-=a->env>>a->sh;}
  noise^=noise<<13;noise^=noise>>17;noise^=noise<<5;int32_t nz=(int32_t)(noise>>17)-16384;
  if(ke>32){kp+=ki;ki-=(ki-kbase)>>9;drums+=(sine(kp)*ke)>>17;ke-= (ke>>drumTail) ? (ke>>drumTail) : 1;}
@@ -202,9 +211,23 @@ void audio(int32_t *out,uint32_t frames){
    animalRemaining--;
   }
  }
+ int32_t dryL=clamp(sum+left,-24000,24000),dryR=clamp(sum+right,-24000,24000);
+ if(fxFilter){int shift=1+fxFilter/16;filterL+=(dryL-filterL)>>shift;filterR+=(dryR-filterR)>>shift;dryL=filterL;dryR=filterR;}
+ else {filterL=dryL;filterR=dryR;}
+ if(fxDelay||fxReverb||fxChorus){
+  unsigned mod=(unsigned)((sine((uint32_t)echoPos*1048576u)+32768)>>10);
+  unsigned shortTap=(echoPos+4096u-700u-mod)&4095u;
+  unsigned roomTap=(echoPos+4096u-1700u)&4095u;
+  int32_t wetL=(echoL[echoPos]*fxDelay+echoR[roomTap]*fxReverb+echoL[shortTap]*fxChorus)/100;
+  int32_t wetR=(echoR[echoPos]*fxDelay+echoL[roomTap]*fxReverb+echoR[shortTap]*fxChorus)/100;
+  echoL[echoPos]=(int16_t)clamp(dryL+wetL/3,-24000,24000);
+  echoR[echoPos]=(int16_t)clamp(dryR+wetR/3,-24000,24000);
+  dryL+=wetL;dryR+=wetR;
+ }else {echoL[echoPos]=0;echoR[echoPos]=0;}
+ echoPos=(echoPos+1)&4095u;
  int volume=masterLevel;
- out[n*2]+=clamp((sum+left)*volume/100,-24000,24000);
- out[n*2+1]+=clamp((sum+right)*volume/100,-24000,24000);
+ out[n*2]+=clamp(dryL*volume/100,-24000,24000);
+ out[n*2+1]+=clamp(dryR*volume/100,-24000,24000);
  }
 }
 static void generate(void){
@@ -499,6 +522,9 @@ static void hud(void){
   text(72,60,instrument(p.sel)->name,WHITE,FONT_SMALL);
   const char *labels[]={"LEVEL","FM DEPTH","DECAY","RATIO","MOTION","DRIVE"};
   int values[]={level[p.sel],toneDepth[p.sel],tails[p.sel],shape[p.sel]+1,motion[p.sel],drive[p.sel]};
+  if(page==ENV){labels[0]="ATTACK MS";values[0]=attackMs[p.sel];}
+  if(page==MOTION){labels[0]="LFO RATE";values[0]=lfoRate[p.sel];}
+  if(page==FX){labels[0]="DRIVE";values[0]=drive[p.sel];labels[1]="DELAY";values[1]=fxDelay;labels[2]="ROOM";values[2]=fxReverb;labels[3]="CHORUS";values[3]=fxChorus;labels[4]="FILTER";values[4]=fxFilter;labels[5]="PARAM";values[5]=fxParameter+1;}
   if(page==GLOBAL){labels[0]="MASTER";values[0]=masterLevel;labels[1]="KEY";values[1]=transpose;labels[2]="OCTAVE";values[2]=octave;}
   if(page==SEQ){labels[0]="STEP";values[0]=cursor+1;labels[1]="LOOP";values[1]=repeat;labels[2]="SECTION";values[2]=section+1;}
   for(int i=0;i<(page==GLOBAL||page==SEQ?3:6);i++){char value[12];format_int(value,values[i]);text(8,80+i*17,labels[i],WHITE,FONT_SMALL);text(135,80+i*17,value,WHITE,FONT_SMALL);}
@@ -508,7 +534,7 @@ static void hud(void){
  rect(0,0,240,48,BLACK);text(0,0,"LIQUID WAVE",WHITE,FONT_SMALL);text(125,0,pageName[page],WHITE,FONT_SMALL);
  text(0,16,styles[p.style],WHITE,FONT_SMALL);char b[12];format_int(b,p.bpm);text(96,16,b,WHITE,FONT_SMALL);
  const char *guide=page==SECTION_SOUND?"K1 SECTION / K2 PARAM":
-  page==EDIT?"ALGORITHM: INSTRUMENT":!p.sel&&page!=GLOBAL&&page!=SEQ?"TEMPO  LEVEL DRIVE TAIL":knobGuide[page];
+  page==FX?"K2 PARAM / K3 VALUE":page==ENV?"K2 ATTACK / K4 TAIL":page==MOTION?"K2 RATE / K3 DEPTH":page==EDIT?"ALGORITHM: INSTRUMENT":!p.sel&&page!=GLOBAL&&page!=SEQ?"TEMPO  LEVEL DRIVE TAIL":knobGuide[page];
  text(0,32,guide,WHITE,FONT_SMALL);
  rect(0,194,240,46,BLACK);text(0,194,sections[section],WHITE,FONT_SMALL);
  text(96,194,names[p.sel],colors[p.sel],FONT_SMALL);text(192,194,recording?"REC":"",WHITE,FONT_SMALL);
@@ -683,6 +709,9 @@ void loop(void){
   if(page==GLOBAL)masterLevel=clamp(masterLevel+d,0,100);
   else if(page==SECTION_SOUND)editParameter=wrap(editParameter+d,PART_PARAMS);
   else if(page==SEQ)cursor=wrap(cursor+d,16);
+  else if(page==FX)fxParameter=wrap(fxParameter+d,5);
+  else if(page==ENV)attackMs[ch]=clamp(attackMs[ch]+d,0,100);
+  else if(page==MOTION)lfoRate[ch]=clamp(lfoRate[ch]+d,0,20);
   else level[ch]=(uint8_t)clamp(level[ch]+d,0,100);
  }
  d=encoder(ENC_KNOB3);if(d){
@@ -694,7 +723,8 @@ void loop(void){
   else if(page==SEQ){
    uint8_t *note=&p.pat[section][ch][cursor];
    *note=(uint8_t)clamp((*note==EMPTY?0:*note)+d,ch?0:1,ch?12:15);
-  }else if(page==FX||!ch)drive[ch]=clamp(drive[ch]+d,0,40);
+  }else if(page==FX){switch(fxParameter){case 0:drive[ch]=clamp(drive[ch]+d,0,40);break;case 1:fxDelay=clamp(fxDelay+d,0,50);break;case 2:fxReverb=clamp(fxReverb+d,0,50);break;case 3:fxChorus=clamp(fxChorus+d,0,50);break;default:fxFilter=clamp(fxFilter+d,0,100);break;}}
+  else if(!ch)drive[ch]=clamp(drive[ch]+d,0,40);
   else toneDepth[ch]=clamp(toneDepth[ch]+d,0,72);
  }
  d=encoder(ENC_KNOB4);if(d){
