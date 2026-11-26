@@ -32,4 +32,7 @@ int liquid_weather_destination(void);
 
 int liquid_weather_parse(const char *json,unsigned len,LiquidWeather *out);
 
+/* Network adapters call this to construct a location-specific HTTPS request path.
+ * Returns 0 on insufficient buffer or invalid destination. */
+unsigned liquid_weather_request(unsigned destination,char *out,unsigned capacity);
 #endif
