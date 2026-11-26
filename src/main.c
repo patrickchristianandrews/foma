@@ -9,6 +9,7 @@
 #include "fm1.h"
 #include "liquid_song.h"
 #include "tidbit_portrait.h"
+#include "weather.h"
 #define NC 8
 #define NS 5
 #define NV 12
@@ -16,7 +17,7 @@
 
 typedef struct { uint32_t magic; uint8_t style,bpm,sel,mute; uint8_t pat[NS][NC][16]; } Project;
 static Project p;
-enum {HOME, MIX, ENV, MOTION, EDIT, GLOBAL, FX, SEQ, SECTION_SOUND};
+enum {HOME, MIX, ENV, MOTION, EDIT, GLOBAL, FX, SEQ, SECTION_SOUND, WEATHER};
 static int page, cursor, octave, loopSection, repeat, transpose;
 static volatile int masterLevel=85;
 static uint8_t level[8]={85,85,85,85,85,85,85,85};
@@ -92,14 +93,23 @@ static int playing,recording,pos,section,step,bar;
 static uint32_t due,remMs,active[8],lastFace,lastHud;
 static uint32_t bootStarted, lastWave;
 static int booting = 1;
+static struct {
+ LiquidWeather reading;
+ LiquidWeatherMusic music;
+ LiquidHarmony harmony;
+ uint8_t pattern[NS][NC][16];
+ uint32_t synced, nextStep, octSince, seed;
+ int place, back, available, playing, step, octHeld, octUsed;
+} weather;
 typedef struct {int x,y,vx,vy,ox,oy;uint8_t expr; } Face;
 static Face f[8]; static uint8_t faceIndex;
 static uint32_t rnd(uint32_t n){return n?random32()%n:0;}
 static void enqueue(Event e){uint8_t h=(head+1)&63;if(h==tail)return;queue[head]=e;head=h;}
-static int degree(int d){return scale[p.style==2?0:1][d%7]+12*(d/7);}
-static void sound_at_root(int ch,int d,int root,int part){
+static int degree(int d,int style){return scale[style==2?0:1][d%7]+12*(d/7);}
+static void sound_at_root(int ch,int d,int root,int part,int style,int gain){
  const SectionSound *fx=&sectionMix[part][ch];
- int volume=clamp(level[ch]+fx->level,0,100);
+ int volume=clamp(level[ch]+fx->level,0,100)*gain/100;
+ if(!volume)return;
  int decay=clamp(tails[ch]+fx->decay,ch?9:5,ch?17:14);
  int shift=instrument(ch)->shift+transpose+octave*12+fx->pitch;
  int depth=clamp(toneDepth[ch]+drive[ch]+fx->depth,0,120);
@@ -112,14 +122,14 @@ static void sound_at_root(int ch,int d,int root,int part){
   return;
  }
  for(int j=0;j<vn[ch];j++){
-  int note=clamp(60+root+shift+degree(d+j*2),0,127);
+  int note=clamp(60+root+shift+degree(d+j*2,style),0,127);
   int animate=motion[ch]?(int)((millis()/40)%12)*motion[ch]/8:0;
   Event e={(uint8_t)(vb[ch]+j),(uint8_t)decay,0,(uint8_t)clamp(shape[ch]+1+fx->ratio,1,8),
     note_inc(note),((ch==2||ch==4)?70:160)*volume,depth+animate,pan};
   enqueue(e);
  }
 }
-static void sound(int ch,int d) { sound_at_root(ch,d,songHarmony.root,section); }
+static void sound(int ch,int d) {sound_at_root(ch,d,songHarmony.root,section,p.style,100);}
 #if FOMA_BLUETOOTH
 static void bluetooth_input(void) {
  uint8_t status,note,velocity;
@@ -190,6 +200,99 @@ static void transport(void){
  int cd=songHarmony.progression[section][bar];
  for(int c=0;c<8;c++){if(p.mute&(1<<c))continue;int d=p.pat[section][c][step];if(c==0){if(d)sound(c,d);}else if(d!=EMPTY)sound(c,d+cd);}
  pos=(pos+1)%512;
+}
+
+int liquid_weather_destination(void){return weather.place;}
+
+int liquid_weather_accept(unsigned destination,const LiquidWeather *reading){
+ if(destination>=liquid_place_count||destination!=(unsigned)weather.place||!liquid_weather_valid(reading))return 0;
+ weather.reading=*reading;
+ weather.synced=millis();
+ weather.available=1;
+ return 1;
+}
+
+static void weather_select(int destination){
+ if(weather.place==destination)return;
+ weather.back=weather.place;
+ weather.place=destination;
+ weather.available=0;
+ weather.playing=0;
+}
+
+static int weather_fresh(uint32_t now){
+ return weather.available && now-weather.synced<1800000u;
+}
+
+static void weather_generate(uint32_t now){
+ int moon=weather.place==LIQUID_MOON;
+ LiquidWeather current=weather.reading;
+ if(!moon)current.local_minute=(uint16_t)((current.local_minute+(now-weather.synced)/60000u)%1440);
+ weather.music=liquid_weather_music(&current,moon?0:liquid_places[weather.place].rhythm,moon);
+ if(!weather.seed)weather.seed=random32();
+ liquid_song_generate(weather.music.style,++weather.seed,weather.pattern,&weather.harmony);
+ weather.step=0;
+}
+
+static void weather_transport(uint32_t now){
+ if(!weather.playing||(int32_t)(now-weather.nextStep)<0)return;
+ if(!weather.step){
+  if(weather.place!=LIQUID_MOON&&!weather_fresh(now)){weather.playing=0;return;}
+  weather_generate(now);
+ }
+ int part=weather.harmony.arrangement[weather.step/64];
+ int chord=weather.harmony.progression[part][weather.step/16%4];
+ int root=weather.harmony.root+weather.music.transpose;
+ int beat=weather.step%16;
+ for(int ch=0;ch<NC;ch++){
+  if(p.mute&(1<<ch))continue;
+  int note=weather.pattern[part][ch][beat];
+  if(!ch){
+   note&=weather.music.drum_mask;
+   if(note)sound_at_root(ch,note,root,part,weather.music.style,100);
+  }else if(note!=EMPTY){
+   int gain=ch==3?weather.music.lead_level:ch==4?weather.music.pad_level:100;
+   sound_at_root(ch,note+chord,root,part,weather.music.style,gain);
+  }
+ }
+ weather.step=(weather.step+1)%512;
+ weather.nextStep=now+15000u/weather.music.bpm;
+}
+
+static void weather_hud(uint32_t now){
+ static const uint16_t accent=RGB(154,215,255);
+ char value[12];
+ rect(0,0,240,240,BLACK);
+ text(8,8,"LIQUID WAVE / WEATHER",accent,FONT_SMALL);
+ if(weather.place==LIQUID_MOON){
+  text(8,36,"THE MOON",WHITE,FONT_BIG);
+  text(8,80,"LUNAR SOUND MODE",accent,FONT_SMALL);
+  text(8,104,"NO EARTH WEATHER HERE",WHITE,FONT_SMALL);
+ }else{
+  text(8,36,liquid_places[weather.place].name,WHITE,FONT_SMALL);
+  if(!weather.available){
+   text(8,64,"--:--",accent,FONT_BIG);
+   text(8,108,"WAITING FOR WEATHER",WHITE,FONT_SMALL);
+  }else{
+   unsigned age=(now-weather.synced)/60000u;
+   unsigned minute=(weather.reading.local_minute+age)%1440;
+   unsigned h=minute/60,m=minute%60;
+   char clock[]={(char)('0'+h/10),(char)('0'+h%10),':',(char)('0'+m/10),(char)('0'+m%10),0};
+   text(8,61,clock,accent,FONT_BIG);
+   text(8,102,liquid_weather_condition(weather.reading.code),WHITE,FONT_SMALL);
+   text(8,124,"TEMP C",accent,FONT_SMALL);
+   format_int(value,weather.reading.temperature10/10);text(94,124,value,WHITE,FONT_SMALL);
+   text(8,144,"WIND KM/H",accent,FONT_SMALL);
+   format_int(value,weather.reading.wind10/10);text(94,144,value,WHITE,FONT_SMALL);
+   text(8,164,"AQI",accent,FONT_SMALL);
+   if(weather.reading.has_aqi){format_int(value,weather.reading.aqi);text(94,164,value,WHITE,FONT_SMALL);}
+   else text(94,164,"--",WHITE,FONT_SMALL);
+   if(!weather_fresh(now))text(8,184,"LAST READING / STALE",accent,FONT_SMALL);
+  }
+ }
+ if(weather.playing)text(161,184,"PLAYING",accent,FONT_SMALL);
+ text(8,202,"OCT+ TRAVEL / HOLD MOON",WHITE,FONT_SMALL);
+ text(8,222,"HOME STAGE / PLAY JAM",WHITE,FONT_SMALL);
 }
 
 static const uint16_t waveColors[] = {RGB(53,44,100),RGB(28,72,105),RGB(85,39,92)};
@@ -280,6 +383,7 @@ static void tune_part(SectionSound *part,int param,int delta){
  *value=(int8_t)clamp(*value+delta,-limit[param],limit[param]);
 }
 static void hud(void){
+ if(page==WEATHER){weather_hud(millis());return;}
  if(page==SECTION_SOUND){
   SectionSound *part=&sectionMix[editSection][p.sel];
   rect(0,48,240,145,BLACK);
@@ -358,12 +462,14 @@ void setup(void){
 }
 void loop(void){
  uint32_t now=millis();
+ int skippedBoot=0;
  if(booting){
   if(now-bootStarted<780 && !button_pressed(BTN_HOME) && !button_pressed(BTN_PLAY)){
    boot_wave(now-bootStarted);
    return;
   }
   booting=0;
+  skippedBoot=1;
   clear(BLACK);
   stage_waves(now);
   for(int i=0;i<NC;i++)faceDraw(i);
@@ -373,7 +479,62 @@ void loop(void){
 #if FOMA_BLUETOOTH
  bluetooth_input();
 #endif
+ if(page==WEATHER){
+  if(!button_pressed(BTN_HOME)){
+   if(button_pressed(BTN_OCT_UP)){weather.octHeld=1;weather.octUsed=0;weather.octSince=now;}
+   if(weather.octHeld && button_held(BTN_OCT_UP) && now-weather.octSince>=3000u && !weather.octUsed){
+    weather_select(LIQUID_MOON);
+    weather.octUsed=1;
+    lastHud=now-1000u;
+   }
+   if(weather.octHeld && button_released(BTN_OCT_UP)){
+    if(!weather.octUsed){
+     int start=weather.place;
+     int target=start<0?0:wrap(start+1+(int)rnd(liquid_place_count-1),liquid_place_count);
+     weather_select(target);
+     lastHud=now-1000u;
+    }
+    weather.octHeld=0;
+   }
+   if(button_pressed(BTN_OCT_DOWN)){weather_select(weather.back);lastHud=now-1000u;}
+   if(button_pressed(BTN_PLAY)){
+    if(weather.playing)weather.playing=0;
+    else if(weather.place==LIQUID_MOON||weather_fresh(now)){
+     weather.playing=1;
+     playing=0;
+     weather.nextStep=now;
+     weather.step=0;
+    }
+    lastHud=now-1000u;
+   }
+   if(weather.playing){
+    static const int8_t whiteKey[]={0,-1,1,-1,2,-1,3,4,-1,5,-1,6};
+    int root=weather.harmony.root+weather.music.transpose;
+    for(int k=0;k<KEY_COUNT;k++)if(key_pressed(k)&&whiteKey[k%12]>=0)
+     sound_at_root(3,whiteKey[k%12]+7*(k/12),root,0,weather.music.style,100);
+   }
+   weather_transport(now);
+   int catchup=0;
+   while(playing && (int32_t)(now-due)>=0 && catchup++<4){
+    transport();due+=15000/p.bpm;remMs+=15000%p.bpm;
+    if(remMs>=p.bpm){remMs-=p.bpm;due++;}
+   }
+   if(now-lastHud>=1000){lastHud=now;weather_hud(now);}
+   led_button(BTN_HOME,1);
+   led_button(BTN_PLAY,weather.playing||playing);
+   return;
+  }
+  weather.playing=0;
+  weather.octHeld=0;
+  page=MIX; /* The existing HOME handler below returns to Stage. */
+ }
  if(button_pressed(BTN_HOME)){
+  if(page==HOME&&!skippedBoot){
+   page=WEATHER;
+   weather_hud(now);
+   lastHud=now;
+   return;
+  }
   page=HOME;
   clear(BLACK);
   stage_waves(now);
@@ -447,7 +608,7 @@ void loop(void){
    *note=ch?(*note==EMPTY?(uint8_t)kd:EMPTY):(*note?0:(uint8_t)kd);
    if(ch?*note!=EMPTY:*note)sound(ch,*note);
   }else{
-   if(page==SECTION_SOUND&&!recording)sound_at_root(ch,kd,songHarmony.root,editSection);
+   if(page==SECTION_SOUND&&!recording)sound_at_root(ch,kd,songHarmony.root,editSection,p.style,100);
    else sound(ch,kd);
    if(recording)p.pat[section][ch][playing?step:k%16]=(uint8_t)kd;
   }

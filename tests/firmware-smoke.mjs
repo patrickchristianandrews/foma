@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 
 const wasm = await WebAssembly.compile(await readFile(process.argv[2]));
 const EDIT = 6, HOME = 8, SAVE = 9, ARP = 10, SEQ = 11, PLAY = 12, REC = 13;
+const OCT_UP = 1;
 const SELECT = 0, KNOB1 = 2, KNOB4 = 5;
 const FRAME_LEN = 240 * 240;
 
@@ -29,6 +30,12 @@ async function device(saved) {
     },
     tap(n) {
       panel.web_buttons(1 << n);
+      panel.web_buttons(0);
+      this.advance(15);
+    },
+    hold(n, duration) {
+      panel.web_buttons(1 << n);
+      this.advance(duration);
       panel.web_buttons(0);
       this.advance(15);
     },
@@ -114,4 +121,20 @@ const migrated = await device(legacy);
 migrated.tap(HOME);
 migrated.tap(SAVE);
 assert.deepEqual(migrated.store().slice(4,656), legacy.slice(4), 'legacy steps and presets survive migration');
-console.log('FM-1 emulator boot, wave layers, Tidbit, transport, audio, and saved-project checks passed.');
+
+const weather = await device(first);
+weather.advance(850);
+weather.tap(HOME);
+const weatherHome = weather.frame();
+weather.tap(PLAY);
+assert(!weather.led(PLAY), 'weather mode waits for live data on Earth');
+weather.tap(OCT_UP);
+assert.notDeepEqual(weather.frame(), weatherHome, 'OCT+ moves to another destination');
+weather.hold(OCT_UP, 3100);
+weather.tap(PLAY);
+assert(weather.led(PLAY), 'Moon mode plays without weather');
+assert(weather.advance(2200), 'Moon mode produces audio');
+weather.tap(HOME);
+weather.tap(SAVE);
+assert.deepEqual(weather.store(), first, 'weather travel and playback preserve the saved arrangement');
+console.log('FM-1 emulator boot, waves, Tidbit, section mixing, transport, project migration and weather-screen checks passed.');
