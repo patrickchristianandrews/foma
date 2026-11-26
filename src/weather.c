@@ -9,6 +9,7 @@ const LiquidPlace liquid_places[] = {
     {"ST JOHNS, CA", 4756, -5271, 2}, {"CAPE TOWN, ZA", -3392, 1842, 3},
     {"HELSINKI, FI", 6017, 2494, 1}, {"MANILA, PH", 1460, 12098, 2},
     {"MEXICO CITY, MX", 1943, -9913, 3}, {"ISTANBUL, TR", 4101, 2897, 2},
+    {"VIRGINIA BEACH, VA", 3685, -7598, 1},
 };
 const unsigned liquid_place_count = sizeof liquid_places / sizeof liquid_places[0];
 
