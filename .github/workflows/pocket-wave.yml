@@ -18,6 +18,10 @@ jobs:
         run: |
           cc -std=c11 -Wall -Wextra -Werror -Isrc src/liquid_song.c tests/song-parity.c -o /tmp/liquid-song-parity
           /tmp/liquid-song-parity
+      - name: Validate live weather response decoder
+        run: |
+          cc -std=c11 -Wall -Wextra -Werror -Isrc src/weather.c src/weather_parse.c tests/weather-parse.c -o /tmp/weather-parse
+          /tmp/weather-parse
       - name: Build firmware and emulator (same command as ./fm1 build)
         run: docker run --rm --init --platform linux/amd64 -u "$(id -u):$(id -g)" -v "$PWD:/work" konsumer/foma-toolchain python3 tools/build.py
       - name: Require a compiled firmware package
