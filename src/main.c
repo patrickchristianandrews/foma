@@ -490,7 +490,7 @@ enum { SWIM_FLOAT, SWIM_PADDLE, SWIM_SURF, SWIM_DIVE, SWIM_LEAP, SWIM_SPLASH };
 static uint8_t swimMode[NC];
 static uint32_t swimSince[NC], swimDuration[NC];
 static int surface_at(int x,uint32_t now){
- return SURF_Y+((sine((uint32_t)x*0x02000000u-now*410000u)*5)>>15);
+ return SURF_Y+((sine((uint32_t)x*(1u<<25)-now*410000u)*5)>>15);
 }
 static void surface_patch(int x,int w){
  uint32_t now=millis();
