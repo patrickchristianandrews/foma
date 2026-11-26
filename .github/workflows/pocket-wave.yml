@@ -3,7 +3,7 @@ on:
   pull_request:
     branches: [main]
   push:
-    branches: [main]
+    branches: [main, liquid-wave-fm1-development]
     paths: ['src/**', 'firmware.json', 'tools/package_pocket_wave.py', 'tools/package_dx7.py', '.github/workflows/pocket-wave.yml']
   workflow_dispatch:
 permissions:
@@ -29,6 +29,8 @@ jobs:
       - name: Test controls and saved songs in the compiled FM-1 emulator
         run: node tests/firmware-smoke.mjs build/web/firmware.wasm
       - name: Package everything (installer first, firmware, emulator, DX7 banks, source, browser toy)
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: python3 tools/package_pocket_wave.py
       - name: Keep the files with this run
         uses: actions/upload-artifact@v4
@@ -49,15 +51,15 @@ jobs:
             --title "Pocket Wave experimental build ${GITHUB_RUN_NUMBER}" --notes-file build/RELEASE-NOTES.md
 
       - name: Publish separate Advanced Liquid Wave beta
-        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'liquid-wave-fm1-development'
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/liquid-wave-fm1-development'
         env:
           GH_TOKEN: ${{ github.token }}
-          BETA_SHA: ${{ github.event.pull_request.head.sha }}
+          BETA_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
           cp build/Pocket-Wave-complete.zip build/Advanced-Liquid-Wave-beta.zip
           cp build/Pocket-Wave.fwsc build/Advanced-Liquid-Wave-beta.fwsc
-          tag="advanced-liquid-wave-beta-${BETA_SHA:0:12}"
+          tag="advanced-liquid-wave-beta"
           if ! gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release create "$tag" --repo "$GITHUB_REPOSITORY" --target "$BETA_SHA" --prerelease --title "Advanced Liquid Wave Beta" --notes "Experimental hardware beta; emulator checks passed, physical hardware not verified. Native Wi-Fi, live weather, online radio and Frodhes are not integrated. Original Liquid Wave release remains separate."
           fi
