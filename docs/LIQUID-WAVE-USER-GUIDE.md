@@ -20,7 +20,7 @@ This guide covers the Liquid Wave firmware in development for the M-VAVE FM-1. T
 4. Turn **KNOB 1** to set the tempo manually. Press **SEL** to mute or unmute the selected part.
 5. Press **SAVE** while stopped to keep the current song and its instruments. The firmware loads that project at startup. A new save replaces the stored project.
 
-The sequencer has Intro, Verse, Chorus, Bridge, and Outro sections. Each section has 16 editable steps per track and four bars of chord changes. The eight performers are Beat Bear (drums), Bass Dog (bass), Chord Bunny (chords), Lead Chick (lead), Pad Cloud (pads), Arp Alien (arpeggios), Extra Ghost (accents), and Tidbit (an additional melodic part).
+The sequencer has Intro, Verse, Chorus, Bridge, and Outro sections. Each section has 16 editable steps per track and four bars of chord changes. The eight performers are Beat Bear (drums), Bass Cat (bass), Chord Bunny (chords), Lead Chick (lead), Pad Cloud (pads), Arp Alien (arpeggios), Extra Ghost (accents), and Tidbit (an additional melodic part).
 
 ## Edit and perform
 
@@ -65,7 +65,7 @@ The Bluetooth MIDI build advertises a MIDI endpoint after startup. Use the Bluet
 
 ## Tidbit Weather Room
 
-From the Stage, press **HOME** to open the Tidbit Weather Room. The cozy window scene uses the existing Tidbit portrait, animated precipitation, a lamp, plant, record player, mug and books. Without fresh weather data the screen is explicitly labeled as a demo. The weather room uses the existing synthesized music engine, not recorded animal sounds. Press **HOME** again to return to the Stage. A tap of **OCT+** picks another destination, **OCT-** returns to the previous one, and holding **OCT+** for three seconds opens the Moon. Press **PLAY** on the Moon to hear an offline composition and play along on the white keys. Travel and Moon playback keep your saved song intact.
+From the Stage, press **HOME** to open the Tidbit Weather Room. The cozy window scene uses the existing Tidbit portrait, animated precipitation, a lamp, plant, record player, mug and books. Without fresh weather data the screen is explicitly labeled as a demo. The weather room includes optional procedural environmental textures and synthesized dog/bird calls, not recorded animal samples. Press ENV to toggle ambience, FX to cycle rain-like textures, wind and thunder, LFO to toggle call level, and SEL to audition a call. These controls are separate from the Stage. Bass Cat remains on the Stage; no cat calls are generated in the weather room. Press **HOME** again to return to the Stage. A tap of **OCT+** picks another destination, **OCT-** returns to the previous one, and holding **OCT+** for three seconds opens the Moon. Press **PLAY** on the Moon to hear an offline composition and play along on the white keys. Travel and Moon playback keep your saved song intact.
 
 The draft shows twelve Earth destinations. The Earth screen waits for a real reading before it displays weather or plays weather-driven music. Native Wi-Fi, live readings, and Wi-Fi setup are still in development.
 
