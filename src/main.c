@@ -75,7 +75,7 @@ static const char *knobGuide[]={"TEMPO  LEVEL  FM  TAIL","TEMPO  LEVEL  FM  TAIL
 static int clamp(int value,int low,int high){return value<low?low:value>high?high:value;}
 static int wrap(int value,int count){return (value%count+count)%count;}
 
-static const char *names[8]={"BEAR","DOG","BUNNY","CHICK","CLOUD","ALIEN","GHOST","TIDBIT"};
+static const char *names[8]={"BEAR","CAT","BUNNY","CHICK","CLOUD","ALIEN","GHOST","TIDBIT"};
 static const char *sections[5]={"INTRO","VERSE","CHORUS","BRIDGE","OUTRO"};
 static const char *styles[4]={"SYNTH","FUNK","BALLAD","HOUSE"};
 static const uint8_t scale[2][7]={{0,2,4,5,7,9,11},{0,2,3,5,7,8,10}};
@@ -378,7 +378,7 @@ static void boot_wave(uint32_t elapsed) {
  previous=front;
 }
 /* LCD adaptations of RandomCandyLand Liquid Wave's character shapes and palette.
- * The bass performer remains a dog rather than the site's cat, per the firmware request. */
+ * Bass Cat belongs on the stage; Tidbit's weather room has no cat. */
 static void mascot_ellipse(int x,int y,int rx,int ry,uint16_t c){
  for(int dy=-ry;dy<=ry;dy++)for(int dx=-rx;dx<=rx;dx++)
   if(dx*dx*ry*ry+dy*dy*rx*rx<=rx*rx*ry*ry)pixel(x+dx,y+dy,c);
@@ -400,7 +400,7 @@ static void portrait_at(int i,int x,int y){
   uint16_t out=RGB(74,42,58), pink=RGB(255,194,216);
   int cx=x+12,cy=y+10;
   if(i==0){for(int k=-1;k<=1;k+=2){mascot_ellipse(cx+k*7,y+4,4,4,out);mascot_ellipse(cx+k*7,y+4,3,3,c);mascot_ellipse(cx+k*7,y+4,1,1,pink);}}
-  if(i==1){for(int k=-1;k<=1;k+=2){mascot_ellipse(cx+k*9,y+8,3,6,out);mascot_ellipse(cx+k*9,y+8,2,5,c);}}
+  if(i==1){for(int k=-1;k<=1;k+=2){for(int j=0;j<7;j++){int w=j/2;line(cx+k*6-w,y+1+j,cx+k*6+w,y+1+j,out);if(w>1)line(cx+k*6-w+1,y+1+j,cx+k*6+w-1,y+1+j,pink);}}}
   if(i==2){for(int k=-1;k<=1;k+=2){mascot_ellipse(cx+k*4,y+4,3,4,out);mascot_ellipse(cx+k*4,y+4,2,3,c);mascot_ellipse(cx+k*4,y+4,1,2,pink);}}
   if(i==3){mascot_ellipse(cx-9,cy,2,3,c);mascot_ellipse(cx+9,cy,2,3,c);for(int k=-1;k<=1;k++)mascot_ellipse(cx+k*2,y+3,1,3,c);}
   if(i==5){line(cx-4,y+5,cx-7,y+1,out);line(cx+4,y+5,cx+7,y+1,out);mascot_ellipse(cx-7,y+1,1,1,pink);mascot_ellipse(cx+7,y+1,1,1,pink);}
@@ -415,7 +415,8 @@ static void portrait_at(int i,int x,int y){
    else {mascot_ellipse(ex,cy-1,1,2,out);pixel(ex,cy-2,WHITE);}
    pixel(cx+k*6,cy+2,pink);
   }
-  if(i==0||i==1)pixel(cx,cy+1,out);
+  if(i==0||i==1)pixel(cx,cy+1,i==1?pink:out);
+  if(i==1){for(int k=-1;k<=1;k+=2){line(cx+k*6,cy+2,cx+k*11,cy+1,out);line(cx+k*6,cy+3,cx+k*11,cy+4,out);}}
   if(hit){mascot_ellipse(cx,cy+3,2,2,out);pixel(cx,cy+4,pink);}
   else if(i==3){line(cx-2,cy+2,cx+2,cy+2,RGB(255,181,74));pixel(cx,cy+3,RGB(255,181,74));}
   else if(i==6)mascot_ellipse(cx,cy+3,1,1,out);
