@@ -83,6 +83,7 @@ static const uint16_t colors[8]={RGB(255,100,40),RGB(190,90,255),RGB(255,210,60)
 static const uint8_t vb[8]={0,0,1,4,5,8,9,10};
 static const uint8_t vn[8]={0,1,3,1,3,1,1,1};
 static volatile uint8_t head,tail;
+static volatile uint8_t releaseRequested;
 typedef struct {uint8_t voice,sh,drum,ratio;uint32_t inc;int32_t amp,idx;int8_t pan;} Event;
 static Event queue[64];
 typedef struct {uint32_t ph,mp,inc;int32_t env,idx;uint8_t sh,ratio;int8_t pan;} Voice;
@@ -159,6 +160,8 @@ void audio(int32_t *out,uint32_t frames){
  while(tail!=head){Event e=queue[tail];tail=(tail+1)&63;
  if(e.drum){drumTail=e.sh;drumPan=e.pan;if(e.drum&1){ke=e.amp;ki=e.inc;kbase=e.inc/7;}if(e.drum&2)se=e.amp*3/4+e.idx*30;if(e.drum&12)he=e.amp/2+e.idx*20;}
  else {Voice *a=&v[e.voice];a->inc=e.inc;a->env=e.amp<<14;a->idx=e.idx;a->sh=e.sh;a->ratio=e.ratio;a->pan=e.pan;}}
+ /* Stop releases active voices smoothly on the audio thread. */
+ if(releaseRequested){releaseRequested=0;for(int j=0;j<NV;j++)if(v[j].sh>10)v[j].sh=10;if(drumTail>10)drumTail=10;}
  for(uint32_t n=0;n<frames;n++){
  int32_t sum=0,left=0,right=0,drums=0;
  for(int j=0;j<NV;j++){Voice *a=&v[j];int32_t env=a->env>>14;if(env<8)continue;
@@ -520,8 +523,8 @@ void loop(void){
    }
    if(button_pressed(BTN_OCT_DOWN)){weather_select(weather.back);lastHud=now-1000u;}
    if(button_pressed(BTN_PLAY)){
-    if(weather.playing)weather.playing=0;
-    else if(playing)playing=0;
+    if(weather.playing){weather.playing=0;releaseRequested=1;}
+    else if(playing){playing=0;releaseRequested=1;}
     else if(weather.place==LIQUID_MOON||weather_fresh(now)){
      weather.playing=1;
      weather.nextStep=now;
@@ -546,6 +549,7 @@ void loop(void){
    led_button(BTN_PLAY,weather.playing||playing);
    return;
   }
+  if(weather.playing)releaseRequested=1;
   weather.playing=0;
   weather.octHeld=0;
   page=MIX; /* The existing HOME handler below returns to Stage. */
@@ -572,7 +576,7 @@ void loop(void){
  if(button_pressed(BTN_GLO))page=GLOBAL;
  if(button_pressed(BTN_FX))page=FX;
  if(button_pressed(BTN_SEQ)){if(page==SEQ)repeat=!repeat;page=SEQ;loopSection=section;}
- if(button_pressed(BTN_PLAY)){playing=!playing;if(playing){pos=0;due=now;remMs=0;}}
+ if(button_pressed(BTN_PLAY)){playing=!playing;if(playing){pos=0;due=now;remMs=0;}else releaseRequested=1;}
  if(button_pressed(BTN_REC))recording=!recording;
  if(button_pressed(BTN_OCT_DOWN))octave=clamp(octave-1,-2,2);
  if(button_pressed(BTN_OCT_UP))octave=clamp(octave+1,-2,2);
