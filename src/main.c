@@ -275,14 +275,26 @@ static void weather_select(int destination){
  weather.playing=0;
 }
 
+static unsigned offlineScene=0;
+static int offlineHour=12,offlineTemp=18,offlineWind=12;
+static uint32_t offlineClock;
+static const uint8_t offlineCodes[]={0,3,45,51,61,71,95};
+static LiquidWeather offline_weather(uint32_t now){
+ LiquidWeather v={0};
+ v.code=offlineCodes[offlineScene];
+ v.temperature10=(int16_t)(offlineTemp*10);
+ v.wind10=(uint16_t)(offlineWind*10);
+ v.local_minute=(uint16_t)((offlineHour*60+(now-offlineClock)/60000u)%1440u);
+ return v;
+}
 static int weather_fresh(uint32_t now){
  return weather.available && now-weather.synced<1800000u;
 }
 
 static void weather_generate(uint32_t now){
  int moon=weather.place==LIQUID_MOON;
- LiquidWeather current=weather.reading;
- if(!moon)current.local_minute=(uint16_t)((current.local_minute+(now-weather.synced)/60000u)%1440);
+ LiquidWeather current=weather_fresh(now)?weather.reading:offline_weather(now);
+ if(!moon&&weather_fresh(now))current.local_minute=(uint16_t)((current.local_minute+(now-weather.synced)/60000u)%1440);
  weather.music=liquid_weather_music(&current,moon?0:liquid_places[weather.place].rhythm,moon);
  if(!weather.seed)weather.seed=random32();
  liquid_song_generate(weather.music.style,++weather.seed,weather.pattern,&weather.harmony);
@@ -292,7 +304,6 @@ static void weather_generate(uint32_t now){
 static void weather_transport(uint32_t now){
  if(!weather.playing||(int32_t)(now-weather.nextStep)<0)return;
  if(!weather.step){
-  if(weather.place!=LIQUID_MOON&&!weather_fresh(now)){weather.playing=0;return;}
   weather_generate(now);
  }
  int part=weather.harmony.arrangement[weather.step/64];
@@ -330,15 +341,27 @@ static void weather_hud(uint32_t now){
  char value[12];
  int moon=weather.place==LIQUID_MOON;
  int live=!moon&&weather_fresh(now);
- unsigned code=live?weather.reading.code:61;
- unsigned minute=live?(weather.reading.local_minute+(now-weather.synced)/60000u)%1440:1260;
+ LiquidWeather demo=offline_weather(now);
+ unsigned code=live?weather.reading.code:demo.code;
+ unsigned minute=live?(weather.reading.local_minute+(now-weather.synced)/60000u)%1440:demo.local_minute;
  int night=minute<360||minute>=1080;
  int snow=code>=71&&code<=77;
  int rain=(code>=51&&code<=67)||(code>=80&&code<=82)||code>=95;
- rect(0,0,240,240,BLACK);
+ rect(0,0,240,240,RGB(49,30,49));
  text(8,5,"TIDBIT WEATHER ROOM",peach,FONT_SMALL);
  text(8,22,moon?"THE MOON":liquid_places[weather.place].name,WHITE,FONT_SMALL);
  rect(61,43,166,105,night?sky:RGB(64,104,132));
+ if(!moon&&code!=0){
+  for(int i=0;i<3;i++){
+   int cx=65+(int)((now/160u+i*53u)%128u);
+   rect(cx,58+i%2*12,28,6,RGB(140,151,174));
+   rect(cx+5,54+i%2*12,18,6,RGB(164,174,194));
+  }
+ }
+ if(!moon&&code==45)for(int i=0;i<5;i++)rect(64,80+i*11,160,3,RGB(152,158,172));
+ if(!moon&&code>=95&&now%2600u<100u){
+  line(180,49,168,77,WHITE);line(168,77,181,75,WHITE);line(181,75,163,100,WHITE);
+ }
  for(int i=0;i<8;i++){
   int x=65+i*20,h=12+(i*17)%35;
   rect(x,144-h,15,h,dim);
@@ -358,6 +381,9 @@ static void weather_hud(uint32_t now){
  line(20,65,42,65,peach);line(20,65,10,84,peach);line(42,65,52,84,peach);
  line(10,84,52,84,peach);line(15,89,47,89,dim);
  rect(8,150,224,3,peach);
+ rect(8,153,224,47,RGB(82,49,62));
+ for(int i=0;i<6;i++)line(8,156+i*8,231,156+i*8,dim);
+ rect(88,140,92,12,RGB(125,78,119));
  /* Tidbit: reuse the existing mascot sprite, enlarged for the room. */
  for(int y=0;y<18;y++)for(int x=0;x<24;x++){
   uint16_t c=tidbitPortrait[y*24+x];
@@ -378,8 +404,11 @@ static void weather_hud(uint32_t now){
  if(live){
   text(8,205,liquid_weather_condition(code),WHITE,FONT_SMALL);
   format_int(value,weather.reading.temperature10/10);text(185,205,value,WHITE,FONT_SMALL);text(210,205,"C",peach,FONT_SMALL);
- }else text(8,205,moon?"LUNAR MODE":weather.available?"STALE / DEMO":"OFFLINE / DEMO",WHITE,FONT_SMALL);
- text(8,222,"ENV AMB / FX MODE / SEL",peach,FONT_SMALL);
+  }else {
+  text(8,205,moon?"LUNAR MODE":liquid_weather_condition(code),WHITE,FONT_SMALL);
+  if(!moon){format_int(value,offlineTemp);text(124,205,value,WHITE,FONT_SMALL);text(150,205,"C",peach,FONT_SMALL);text(170,205,"DEMO",purple,FONT_SMALL);}
+ }
+ text(8,222,"K1 SKY K2 HR K3 C K4 WIND",peach,FONT_SMALL);
  if(ambientLevel)text(8,35,"AMB",purple,FONT_SMALL);
  if(animalLevel)text(34,35,"CALL",purple,FONT_SMALL);
  if(weather.playing)rect(224,8,7,7,purple);
@@ -765,13 +794,18 @@ void loop(void){
    if(button_pressed(BTN_PLAY)){
     if(weather.playing){weather.playing=0;releaseRequested=1;}
     else if(playing){playing=0;releaseRequested=1;}
-    else if(weather.place==LIQUID_MOON||weather_fresh(now)){
+    else {
      weather.playing=1;
      weather.nextStep=now;
      weather.step=0;
     }
     lastHud=now-1000u;
    }
+   int wd=encoder(ENC_SELECT);if(wd)weather_select(wrap((weather.place<0?0:weather.place)+wd,liquid_place_count));
+   wd=encoder(ENC_KNOB1);if(wd){offlineScene=wrap((int)offlineScene+wd,COUNT(offlineCodes));weather.available=0;weather.step=0;}
+   wd=encoder(ENC_KNOB2);if(wd){offlineHour=wrap(offlineHour+wd,24);offlineClock=now;weather.available=0;weather.step=0;}
+   wd=encoder(ENC_KNOB3);if(wd){offlineTemp=clamp(offlineTemp+wd,-30,45);weather.available=0;weather.step=0;}
+   wd=encoder(ENC_KNOB4);if(wd){offlineWind=clamp(offlineWind+wd,0,100);weather.available=0;weather.step=0;}
    /* Dedicated weather controls: FX cycles texture, ENV toggles ambience,
       LFO toggles dog/wildlife level, SEL auditions the selected call. */
    if(button_pressed(BTN_FX))ambientMode=(ambientMode+1)%4;
