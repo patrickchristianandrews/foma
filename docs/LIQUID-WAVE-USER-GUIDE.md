@@ -59,13 +59,17 @@ Outside Sound Edit, **ALGORITHM** adjusts the track's FM ratio or Beat Bear's dr
 
 Values are offsets from the track's base sound. Set an offset to zero to restore the base sound for that section. A change to the Chorus has no effect on the Verse. Stereo pan is most apparent through stereo headphones.
 
+## Four HOME screens
+
+HOME cycles through Stage, Tidbit Weather Room, Random Song Details, and Online Radio. Song Details displays style, tempo, key, chord degrees and the eight four-bar arrangement blocks. ARP generates a new song; PLAY controls its transport. The Radio screen does not stream yet.
+
 ## Bluetooth MIDI
 
 The Bluetooth MIDI build advertises a MIDI endpoint after startup. Use the Bluetooth MIDI device picker in your host or music app to connect. Incoming note-on messages play the selected sound as a decaying hit. MIDI channel 10 triggers Beat Bear. Play with the panel or the sequencer while connected. The browser emulator does not model the Bluetooth radio.
 
 ## Tidbit Weather Room
 
-From the Stage, press **HOME** to open the Tidbit Weather Room. The cozy window scene uses the existing Tidbit portrait, animated precipitation, a lamp, plant, record player, mug and books. Without fresh weather data the screen is explicitly labeled as a demo. The weather room includes optional procedural environmental textures and synthesized dog/bird calls, not recorded animal samples. Press ENV to toggle ambience, FX to cycle rain-like textures, wind and thunder, LFO to toggle call level, and SEL to audition a call. These controls are separate from the Stage. Bass Cat remains on the Stage; no cat calls are generated in the weather room. Press **HOME** again to return to the Stage. A tap of **OCT+** picks another destination, **OCT-** returns to the previous one, and holding **OCT+** for three seconds opens the Moon. Press **PLAY** on the Moon to hear an offline composition and play along on the white keys. Travel and Moon playback keep your saved song intact.
+From the Stage, press **HOME** to open the Tidbit Weather Room. The cozy window scene uses the existing Tidbit portrait, animated precipitation, a lamp, plant, record player, mug and books. Without fresh weather data the screen is explicitly labeled as a demo. The weather room includes optional procedural environmental textures and synthesized dog/bird calls, not recorded animal samples. Press ENV to toggle ambience, FX to cycle rain-like textures, wind and thunder, LFO to toggle call level, and SEL to audition a call. These controls are separate from the Stage. Bass Cat remains on the Stage; no cat calls are generated in the weather room. Press **HOME** again for Random Song Details, then again for Online Radio, then again to return to Stage. Online Radio is a dedicated status screen only until native network and stream decoding are implemented. A tap of **OCT+** picks another destination, **OCT-** returns to the previous one, and holding **OCT+** for three seconds opens the Moon. Press **PLAY** on the Moon to hear an offline composition and play along on the white keys. Travel and Moon playback keep your saved song intact.
 
 The draft shows twelve Earth destinations. The Earth screen waits for a real reading before it displays weather or plays weather-driven music. Native Wi-Fi, live readings, and Wi-Fi setup are still in development.
 
