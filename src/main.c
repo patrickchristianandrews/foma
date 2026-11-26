@@ -118,7 +118,7 @@ static struct {
  int place, back, available, playing, step, octHeld, octUsed;
 } weather;
 typedef struct {int x,y,vx,vy,ox,oy;uint8_t expr; } Face;
-static Face f[8]; static uint8_t faceIndex;
+static Face f[8];
 static uint32_t rnd(uint32_t n){return n?random32()%n:0;}
 static void enqueue(Event e){uint8_t h=(head+1)&63;if(h==tail)return;queue[head]=e;head=h;}
 static int degree(int d,int style){return scale[style==2?0:1][d%7]+12*(d/7);}
@@ -486,32 +486,83 @@ static void portrait_at(int i,int x,int y){
 }
 /* Surface is drawn over the lower part of each swimmer; foreground foam is
  * deliberately separate from the distant whitecapped waves. */
+enum { SWIM_FLOAT, SWIM_PADDLE, SWIM_SURF, SWIM_DIVE, SWIM_LEAP, SWIM_SPLASH };
+static uint8_t swimMode[NC];
+static uint32_t swimSince[NC], swimDuration[NC];
+static int surface_at(int x,uint32_t now){
+ return SURF_Y+((sine((uint32_t)x*0x02000000u-now*410000u)*5)>>15);
+}
 static void surface_patch(int x,int w){
- rect(x,SURF_Y,w,192-SURF_Y,SURF_COLOR);
- line(x,SURF_Y,x+w-1,SURF_Y,RGB(124,211,233));
+ uint32_t now=millis();
+ for(int k=x;k<x+w;k+=4){
+  int n=clamp(x+w-k,1,4),y=surface_at(k,now);
+  rect(k,137,n,y-137,BLACK);
+  rect(k,y,n,192-y,SURF_COLOR);
+  line(k,y,k+n-1,y,RGB(124,211,233));
+  if(y<SURF_Y-2)line(k,y-1,k+n-1,y-1,RGB(219,248,255));
+  if(((k/4+(int)(now/240u))%13)==0)line(k,176,k+n-1,176,RGB(42,124,157));
+ }
 }
 static void faceDraw(int i){
  Face *a=&f[i];
- if(a->y<SURF_Y){
+ int water=surface_at(a->x+12,millis());
+ if(a->y<water){
   portrait_at(i,a->x,a->y);
-  int lower=a->y+19-SURF_Y;
-  if(lower>0){rect(a->x-1,SURF_Y,26,lower,SURF_COLOR);line(a->x-1,SURF_Y,a->x+24,SURF_Y,RGB(124,211,233));}
+  int lower=a->y+19-water;
+  if(lower>0){rect(a->x-1,water,26,lower,SURF_COLOR);line(a->x-1,water,a->x+24,water,RGB(124,211,233));}
  }
  a->ox=a->x;a->oy=a->y;
 }
-static void stage_splash(int i,uint32_t now){
+static void swimmer_step(int i,uint32_t now){
  Face *a=&f[i];
- unsigned tick=(now/35u+i*11u)%100u;
- /* Bob cycle: splashes just after crossing the surface in either direction. */
- int distance=a->y+9-SURF_Y;
- if(distance< -5||distance>5)return;
- int cx=a->x+12,spread=5+(int)(tick%7u);
+ if(!swimDuration[i]||now-swimSince[i]>=swimDuration[i]){
+  unsigned next=(swimMode[i]+1+rnd(5))%6;
+  swimMode[i]=(uint8_t)next;swimSince[i]=now;
+  static const uint16_t durations[]={4200,3600,3200,2600,2400,2100};
+  swimDuration[i]=durations[next]+rnd(1700);
+  if(rnd(3)==0)a->vx=-a->vx;
+ }
+ uint32_t age=now-swimSince[i],duration=swimDuration[i];
+ unsigned progress=(unsigned)(age*256u/duration);
+ int arc=clamp(sine(progress<<23),0,32767);
+ int water=surface_at(a->x+12,now);
+ int bob=sine(now*260000u+(uint32_t)i*536870912u)>>13;
+ int target=water-16+bob,dx=0;
+ switch(swimMode[i]){
+  case SWIM_FLOAT: target=water-16+bob;dx=(now/200u+i)%2==0?1:0;break;
+  case SWIM_PADDLE: target=water-12+bob;dx=1;break;
+  case SWIM_SURF: target=water-22-(arc*13>>15);dx=2+(arc>>14);break;
+  case SWIM_DIVE: target=water-14+(arc*30>>15);dx=1;break;
+  case SWIM_LEAP: target=water-15-(arc*29>>15);dx=2;break;
+  case SWIM_SPLASH: target=water-11+bob;dx=1;break;
+ }
+ a->x+=a->vx*dx;
+ if(a->x<8){a->x=8;a->vx=1;}
+ if(a->x>208){a->x=208;a->vx=-1;}
+ a->y+=clamp(target-a->y,-3,3);
+}
+static void stage_splash(int i,uint32_t now){
+ Face *a=&f[i];int cx=a->x+12,water=surface_at(cx,now);
+ uint32_t age=now-swimSince[i];unsigned t=(age/80u)%10u;
+ int mode=swimMode[i],cross=a->y+9-water;
+ if(mode==SWIM_SURF){
+  int tail=clamp(cx-a->vx*15,0,239);
+  line(tail,water+2,cx,water-1,RGB(222,249,255));
+  line(clamp(tail-a->vx*6,0,239),water+5,cx,water+3,RGB(124,211,233));
+ }
+ if(mode==SWIM_DIVE&&a->y>=water){
+  for(int k=0;k<3;k++){
+   int x=clamp(cx+(k-1)*5,1,238),y=water+4+(int)((age/100u+k*4u)%15u);
+   frame(x,y,3,3,RGB(115,211,239));
+  }
+ }
+ if(mode==SWIM_FLOAT||((cross< -7||cross>7)&&mode!=SWIM_SPLASH&&mode!=SWIM_SURF))return;
  uint16_t foam=RGB(222,249,255);
  for(int k=-1;k<=1;k+=2){
-  int x=clamp(cx+k*spread,1,238);
-  int y=SURF_Y-3-(int)((tick+k+8)%6u);
+  int x=clamp(cx+k*(5+(int)t),1,238);
+  int y=water-3-(int)(t*(10u-t)/4u);
   pixel(x,y,foam);pixel(clamp(x+k*2,1,238),y+3,RGB(115,211,239));
-  line(clamp(cx+k*3,1,238),SURF_Y+2,x,SURF_Y+2,foam);
+  line(clamp(cx+k*3,1,238),water+2,x,water+2,foam);
  }
 }
 static void stage_surface(void){surface_patch(0,240);}
@@ -825,26 +876,19 @@ void loop(void){
   }
  }
  int catchup=0;while(playing&&(int32_t)(now-due)>=0&&catchup++<4){transport();due+=15000/p.bpm;remMs+=15000%p.bpm;if(remMs>=p.bpm){remMs-=p.bpm;due++;}}
- if(now-lastFace>=35&&page==HOME){lastFace=now;
- /* Erase all old silhouettes and droplets before drawing any swimmer. */
+ if(now-lastFace>=85&&page==HOME){lastFace=now;
+ /* Clear old silhouettes and wakes before compositing the next ocean frame. */
  for(int j=0;j<NC;j++){
-  Face *a=&f[j];int x=clamp(a->ox-3,0,239),w=clamp(30,1,240-x);
-  int top=clamp(a->oy-2,91,SURF_Y);
-  if(top<SURF_Y)rect(x,top,w,SURF_Y-top,BLACK);
-  rect(x,SURF_Y-11,w,11,BLACK);
-  rect(x,SURF_Y,w,24,SURF_COLOR);
-  line(x,SURF_Y,x+w-1,SURF_Y,RGB(124,211,233));
+  Face *a=&f[j];int x=clamp(a->ox-11,0,239),w=clamp(46,1,240-x);
+  int top=clamp(a->oy-3,91,137);
+  if(top<137)rect(x,top,w,137-top,BLACK);
+  rect(x,125,w,12,BLACK);
  }
- int i=faceIndex;Face *a=&f[i];
- a->x+=a->vx*3;if(a->x<2){a->x=2;a->vx=1;}if(a->x>214){a->x=214;a->vx=-1;}
- for(int j=0;j<NC;j++){
-  uint32_t phase=now*1300000u+(uint32_t)j*536870912u;
-  f[j].y=SURF_Y-8+(sine(phase)*17>>15);
- }
- if(now-lastWave>=90){lastWave=now;stage_waves(now);}
+ stage_surface();
+ for(int j=0;j<NC;j++)swimmer_step(j,now);
+ if(now-lastWave>=140){lastWave=now;stage_waves(now);}
  for(int j=0;j<NC;j++)faceDraw(j);
  for(int j=0;j<NC;j++)stage_splash(j,now);
- faceIndex=(faceIndex+1)%NC;
  }
  if(now-lastHud>=140){lastHud=now;hud();}
  led_button(BTN_PLAY,playing);led_button(BTN_REC,recording);
