@@ -386,39 +386,53 @@ static void weather_hud(uint32_t now){
 }
 
 static const uint16_t waveColors[] = {RGB(28,72,105),RGB(42,124,157),RGB(103,212,250)};
-/* Distant ocean horizon: keep the wave band behind and above the foreground performers. */
-static const int waveRows[] = {56,67,78};
-
-static int wave_height(int x, int layer, uint32_t phase) {
- uint32_t angle = (uint32_t)x * (0x01900000u + (uint32_t)layer * 0x00800000u);
- angle -= phase * (2u + (uint32_t)layer);
- return (sine(angle) * (5 + layer)) >> 15;
-}
-
-static void stage_waves(uint32_t now) {
- uint32_t phase = now * 1800000u;
- static uint32_t previousPhase;
- static int painted;
- if (painted) {
-  for (int layer=0;layer<3;layer++)
-   for (int x=0;x<SCREEN_W-1;x+=4) {
-    int end=x+4<SCREEN_W?x+4:SCREEN_W-1, row=waveRows[layer];
-    int y0=row+wave_height(x,layer,previousPhase),y1=row+wave_height(end,layer,previousPhase);
-    line(x,y0,end,y1,BLACK);
-    line(x,y0-1,end,y1-1,BLACK);
-   }
+/* A little banner plane crosses the sky above the foreground swimmers.
+ * Independent random state: sky messages never change the song generator. */
+static const char *const skyMessages[]={
+ "KEEP GOING","YOU CAN DO IT","GOOD THINGS AHEAD","ENJOY THE MOMENT",
+ "MAKE SOME JOY","BE KIND","STAY CURIOUS","YOU MATTER",
+ "ONE STEP AT A TIME","LET YOURSELF SHINE","KEEP CREATING","FIND YOUR RHYTHM",
+ "TODAY IS YOURS","SMALL WINS COUNT","GOOD VIBES","DREAM BIG"
+};
+static uint32_t skyStart,skySeed=1831565813u;
+static unsigned skyMessage;
+static int skyReady;
+static void stage_plane(uint32_t now){
+ if(!skyReady||now-skyStart>=16000u){
+  skySeed^=skySeed<<13;skySeed^=skySeed>>17;skySeed^=skySeed<<5;
+  unsigned next=skySeed%COUNT(skyMessages);
+  if(skyReady&&next==skyMessage)next=(next+1)%COUNT(skyMessages);
+  skyMessage=next;skyStart=now;skyReady=1;
  }
- for (int layer=0;layer<3;layer++)
-  for (int x=0;x<SCREEN_W-1;x+=4) {
-   int end=x+4<SCREEN_W?x+4:SCREEN_W-1, row=waveRows[layer];
-   int h0=wave_height(x,layer,phase),h1=wave_height(end,layer,phase);
-   line(x,row+h0,end,row+h1,waveColors[layer]);
-   if(h0<=-3&&h1<=-3)line(x,row+h0-1,end,row+h1-1,RGB(219,248,255));
-  }
- painted=1;
- previousPhase=phase;
+ const char *msg=skyMessages[skyMessage];
+ int w=text_width(msg,FONT_SMALL)+12;
+ int x=(int)((now-skyStart)/40u)-28;
+ int left=x-w-14;
+ rect(0,48,240,42,BLACK);
+ /* clipped banner and tow rope, with lettering only where fully visible */
+ int lo=clamp(left,0,240),hi=clamp(left+w,0,240);
+ if(hi>lo){
+  rect(lo,57,hi-lo,22,RGB(255,233,173));
+  line(lo,57,hi-1,57,RGB(240,143,228));
+  line(lo,78,hi-1,78,RGB(240,143,228));
+ }
+ for(int i=0;msg[i];i++){
+  int tx=left+6+i*8;char letter[2]={msg[i],0};
+  if(tx>=0&&tx<=232)text(tx,60,letter,RGB(56,33,79),FONT_SMALL);
+ }
+ lo=clamp(left+w,0,239);hi=clamp(x,0,239);
+ if(x>0&&left+w<240&&hi>lo)line(lo,68,hi,65,RGB(200,215,235));
+ /* side profile, wings, tail, cockpit and spinning propeller */
+ for(int k=0;k<27;k++){
+  int px=x+k;if(px<0||px>=240)continue;
+  if(k<23)rect(px,63,1,5,RGB(210,235,255));
+  if(k<6)rect(px,58+k/2,1,5,RGB(180,140,240));
+  if(k>=8&&k<=17)rect(px,68,1,5-(k-8)/3,RGB(180,140,240));
+  if(k>=14&&k<=20)rect(px,60,1,3,RGB(103,212,250));
+  if(k>=21&&k<=24)rect(px,64,1,3,RGB(255,196,80));
+  if(k==26)rect(px,61+(int)((now/80u)%2u),1,8,WHITE);
+ }
 }
-
 static void boot_wave(uint32_t elapsed) {
  static int previous=-1;
  if (previous<0) text(32,72,"LIQUID WAVE",WHITE,FONT_BIG);
@@ -712,7 +726,7 @@ void loop(void){
   booting=0;
   skippedBoot=1;
   clear(BLACK);
-  stage_waves(now);
+  stage_plane(now);
   stage_surface();
   for(int i=0;i<NC;i++)faceDraw(i);
   lastFace=lastWave=lastHud=now;
@@ -789,7 +803,7 @@ void loop(void){
   }
   page=HOME;
   clear(BLACK);
-  stage_waves(now);
+  stage_plane(now);
   stage_surface();
   for(int i=0;i<NC;i++)faceDraw(i);
  }
@@ -886,7 +900,7 @@ void loop(void){
  }
  stage_surface();
  for(int j=0;j<NC;j++)swimmer_step(j,now);
- if(now-lastWave>=140){lastWave=now;stage_waves(now);}
+ if(now-lastWave>=85){lastWave=now;stage_plane(now);}
  for(int j=0;j<NC;j++)faceDraw(j);
  for(int j=0;j<NC;j++)stage_splash(j,now);
  }
