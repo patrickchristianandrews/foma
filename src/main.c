@@ -383,8 +383,9 @@ static void weather_hud(uint32_t now){
  if(weather.playing)rect(224,8,7,7,purple);
 }
 
-static const uint16_t waveColors[] = {RGB(53,44,100),RGB(28,72,105),RGB(85,39,92)};
-static const int waveRows[] = {76,117,158};
+static const uint16_t waveColors[] = {RGB(28,72,105),RGB(42,124,157),RGB(103,212,250)};
+/* Distant ocean horizon: keep the wave band behind and above the foreground performers. */
+static const int waveRows[] = {56,67,78};
 
 static int wave_height(int x, int layer, uint32_t phase) {
  uint32_t angle = (uint32_t)x * (0x01900000u + (uint32_t)layer * 0x00800000u);
@@ -573,7 +574,7 @@ void setup(void){
   }
   for(int ch=0;ch<NC;ch++)chooseInstrument(ch,preset[ch]);
  }
- for(int i=0;i<8;i++){f[i].x=8+(i%4)*55;f[i].y=49+(i/4)*65;f[i].vx=rnd(2)?1:-1;f[i].vy=rnd(2)?1:-1;f[i].ox=f[i].x;f[i].oy=f[i].y;}
+ for(int i=0;i<8;i++){f[i].x=8+(i%4)*55;f[i].y=92+(i/4)*53;f[i].vx=rnd(2)?1:-1;f[i].vy=rnd(2)?1:-1;f[i].ox=f[i].x;f[i].oy=f[i].y;}
  bootStarted=millis();
  boot_wave(0);
 #if FOMA_BLUETOOTH
@@ -748,7 +749,7 @@ void loop(void){
  int catchup=0;while(playing&&(int32_t)(now-due)>=0&&catchup++<4){transport();due+=15000/p.bpm;remMs+=15000%p.bpm;if(remMs>=p.bpm){remMs-=p.bpm;due++;}}
  if(now-lastFace>=35&&page==HOME){lastFace=now;int i=faceIndex;Face *a=&f[i];
  rect(a->ox-1,a->oy-1,26,20,BLACK);
- a->x+=a->vx*3;a->y+=a->vy*3;if(a->x<2){a->x=2;a->vx=1;}if(a->x>214){a->x=214;a->vx=-1;}if(a->y<49){a->y=49;a->vy=1;}if(a->y>170){a->y=170;a->vy=-1;}
+ a->x+=a->vx*3;a->y+=a->vy*3;if(a->x<2){a->x=2;a->vx=1;}if(a->x>214){a->x=214;a->vx=-1;}if(a->y<92){a->y=92;a->vy=1;}if(a->y>170){a->y=170;a->vy=-1;}
  if(now-lastWave>=90){lastWave=now;stage_waves(now);}
  for(int j=0;j<NC;j++)faceDraw(j);
  faceIndex=(faceIndex+1)%NC;
