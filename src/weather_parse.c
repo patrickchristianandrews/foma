@@ -43,3 +43,30 @@ int liquid_weather_parse(const char *json,unsigned len,LiquidWeather *out){
  if(!liquid_weather_valid(&v))return 0;
  *out=v;return 1;
 }
+
+static int append(char **p,unsigned *left,const char *s){
+ while(*s){if(*left<=1)return 0;*(*p)++=*s++;--*left;}return 1;
+}
+static int coordinate(char **p,unsigned *left,int32_t n){
+ char digits[12];unsigned i=0;uint32_t v;
+ if(n<0){if(!append(p,left,"-"))return 0;v=(uint32_t)(-n);}else v=(uint32_t)n;
+ unsigned whole=v/100u;
+ do{digits[i++]=(char)('0'+whole%10u);whole/=10u;}while(whole);
+ while(i){char t[2]={digits[--i],0};if(!append(p,left,t))return 0;}
+ char frac[4]={'.',(char)('0'+v/10u%10u),(char)('0'+v%10u),0};
+ return append(p,left,frac);
+}
+unsigned liquid_weather_request(unsigned destination,char *out,unsigned capacity){
+ if(!out||!capacity)return 0;
+ out[0]=0;
+ if(destination>=liquid_place_count)return 0;
+ char *p=out;unsigned left=capacity;
+ const LiquidPlace *place=&liquid_places[destination];
+ if(!append(&p,&left,"/v1/forecast?latitude=")||
+ !coordinate(&p,&left,place->latitude100)||
+ !append(&p,&left,"&longitude=")||
+ !coordinate(&p,&left,place->longitude100)||
+ !append(&p,&left,"&current=temperature_2m,wind_speed_10m,weather_code&timezone=auto")){
+ out[0]=0;return 0;}
+ *p=0;return (unsigned)(p-out);
+}
