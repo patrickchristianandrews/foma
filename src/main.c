@@ -377,23 +377,51 @@ static void boot_wave(uint32_t elapsed) {
  }
  previous=front;
 }
+/* LCD adaptations of RandomCandyLand Liquid Wave's character shapes and palette.
+ * The bass performer remains a dog rather than the site's cat, per the firmware request. */
+static void mascot_ellipse(int x,int y,int rx,int ry,uint16_t c){
+ for(int dy=-ry;dy<=ry;dy++)for(int dx=-rx;dx<=rx;dx++)
+  if(dx*dx*ry*ry+dy*dy*rx*rx<=rx*rx*ry*ry)pixel(x+dx,y+dy,c);
+}
 static void portrait_at(int i,int x,int y){
- uint16_t col=p.mute&(1<<i)?RGB(90,90,90):colors[i];
- int hit=millis()<active[i];
+ static const uint16_t palette[]={RGB(201,139,90),RGB(180,140,240),RGB(255,226,122),RGB(127,208,255),RGB(255,179,217),RGB(143,240,164),RGB(255,210,166)};
+ static const uint16_t light[]={RGB(243,210,176),RGB(236,220,255),RGB(255,246,201),RGB(223,244,255),RGB(255,227,241),RGB(215,255,224),RGB(255,240,224)};
+ int muted=(p.mute&(1<<i))!=0;
+ uint32_t now=millis();
+ int hit=(int32_t)(active[i]-now)>0&&!muted;
  if(i==7){
-  int muted=(p.mute&(1<<i))!=0;
   for(int row=0;row<18;row++)for(int tx=0;tx<24;tx++){
    uint16_t color=tidbitPortrait[row*24+tx];
    if(color)pixel(x+tx,y+row,muted?(uint16_t)((color&0xf7deu)>>1):color);
   }
-  tidbit_mouth(x,y,1,hit&&!muted,millis());
-  if(i==p.sel)frame(x-1,y-1,26,20,WHITE);
-  return;
+  tidbit_mouth(x,y,1,hit,now);
+ }else{
+  uint16_t c=muted?RGB(169,163,173):palette[i], l=muted?RGB(214,209,218):light[i];
+  uint16_t out=RGB(74,42,58), pink=RGB(255,194,216);
+  int cx=x+12,cy=y+10;
+  if(i==0){for(int k=-1;k<=1;k+=2){mascot_ellipse(cx+k*7,y+4,4,4,out);mascot_ellipse(cx+k*7,y+4,3,3,c);mascot_ellipse(cx+k*7,y+4,1,1,pink);}}
+  if(i==1){for(int k=-1;k<=1;k+=2){mascot_ellipse(cx+k*9,y+8,3,6,out);mascot_ellipse(cx+k*9,y+8,2,5,c);}}
+  if(i==2){for(int k=-1;k<=1;k+=2){mascot_ellipse(cx+k*4,y+4,3,4,out);mascot_ellipse(cx+k*4,y+4,2,3,c);mascot_ellipse(cx+k*4,y+4,1,2,pink);}}
+  if(i==3){mascot_ellipse(cx-9,cy,2,3,c);mascot_ellipse(cx+9,cy,2,3,c);for(int k=-1;k<=1;k++)mascot_ellipse(cx+k*2,y+3,1,3,c);}
+  if(i==5){line(cx-4,y+5,cx-7,y+1,out);line(cx+4,y+5,cx+7,y+1,out);mascot_ellipse(cx-7,y+1,1,1,pink);mascot_ellipse(cx+7,y+1,1,1,pink);}
+  if(i==4){mascot_ellipse(cx,y+1,4,1,RGB(255,196,0));for(int k=-1;k<=1;k++){mascot_ellipse(cx+k*6,cy,5,5,out);mascot_ellipse(cx+k*6,cy,4,4,c);}mascot_ellipse(cx,cy-3,6,5,c);}
+  else if(i==6){mascot_ellipse(cx,cy,8,7,out);rect(cx-8,cy,17,6,out);rect(cx-7,cy,15,5,c);mascot_ellipse(cx,cy,7,6,c);for(int k=-1;k<=1;k++)mascot_ellipse(cx+k*5,y+16,2,1,c);line(cx-4,y+4,cx,y,out);line(cx,y,cx+4,y+4,out);rect(cx-2,y+2,5,2,pink);pixel(cx,y,WHITE);}
+  else {mascot_ellipse(cx,cy,9,7,out);mascot_ellipse(cx,cy,8,6,c);}
+  if(i==0||i==1||i==3)mascot_ellipse(cx,cy+3,4,3,l);
+  int blink=muted||((now/130u+i*3u)%37u==0);
+  for(int k=-1;k<=1;k+=2){
+   int ex=cx+k*3;
+   if(blink)line(ex-1,cy-1,ex+1,cy-1,out);
+   else {mascot_ellipse(ex,cy-1,1,2,out);pixel(ex,cy-2,WHITE);}
+   pixel(cx+k*6,cy+2,pink);
+  }
+  if(i==0||i==1)pixel(cx,cy+1,out);
+  if(hit){mascot_ellipse(cx,cy+3,2,2,out);pixel(cx,cy+4,pink);}
+  else if(i==3){line(cx-2,cy+2,cx+2,cy+2,RGB(255,181,74));pixel(cx,cy+3,RGB(255,181,74));}
+  else if(i==6)mascot_ellipse(cx,cy+3,1,1,out);
+  else {line(cx-2,cy+2,cx-1,cy+3,out);line(cx-1,cy+3,cx+1,cy+3,out);line(cx+1,cy+3,cx+2,cy+2,out);}
+  if(i==2){pixel(cx,cy+4,WHITE);pixel(cx-2,y+17,pink);pixel(cx+2,y+17,pink);}
  }
- rect(x,y,24,18,col);
- if(p.mute&(1<<i)){line(x+4,y+6,x+8,y+6,BLACK);line(x+15,y+6,x+19,y+6,BLACK);}
- else {rect(x+5,y+4,3,4,BLACK);rect(x+16,y+4,3,4,BLACK);}
- if(hit&&!(p.mute&(1<<i)))rect(x+8,y+10,8,5,BLACK);else line(x+8,y+12,x+15,y+12,BLACK);
  if(i==p.sel)frame(x-1,y-1,26,20,WHITE);
 }
 static void faceDraw(int i){
