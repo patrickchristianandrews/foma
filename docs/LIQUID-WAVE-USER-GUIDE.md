@@ -20,7 +20,7 @@ This guide covers the Liquid Wave firmware in development for the M-VAVE FM-1. T
 4. Turn **KNOB 1** to set the tempo manually. Press **SEL** to mute or unmute the selected part.
 5. Press **SAVE** while stopped to keep the current song and its instruments. The firmware loads that project at startup. A new save replaces the stored project.
 
-The sequencer has Intro, Verse, Chorus, Bridge, and Outro sections. Each section has 16 editable steps per track and four bars of chord changes. The eight performers are Beat Bear (drums), Bass Cat (bass), Chord Bunny (chords), Lead Chick (lead), Pad Cloud (pads), Arp Alien (arpeggios), Extra Ghost (accents), and Tidbit (an additional melodic part).
+The sequencer has Intro, Verse, Chorus, Bridge, and Outro sections. Each section has 16 editable steps per track and four bars of chord changes. The eight performers are Beat Bear (drums), Bass Dog (bass), Chord Bunny (chords), Lead Chick (lead), Pad Cloud (pads), Arp Alien (arpeggios), Extra Ghost (accents), and Tidbit (an additional melodic part).
 
 ## Edit and perform
 
@@ -63,9 +63,9 @@ Values are offsets from the track's base sound. Set an offset to zero to restore
 
 The Bluetooth MIDI build advertises a MIDI endpoint after startup. Use the Bluetooth MIDI device picker in your host or music app to connect. Incoming note-on messages play the selected sound as a decaying hit. MIDI channel 10 triggers Beat Bear. Play with the panel or the sequencer while connected. The browser emulator does not model the Bluetooth radio.
 
-## Weather screen preview
+## Tidbit Weather Room
 
-From the Stage, press **HOME** to open Weather. Press **HOME** again to return to the Stage. A tap of **OCT+** picks another destination, **OCT-** returns to the previous one, and holding **OCT+** for three seconds opens the Moon. Press **PLAY** on the Moon to hear an offline composition and play along on the white keys. Travel and Moon playback keep your saved song intact.
+From the Stage, press **HOME** to open the Tidbit Weather Room. The cozy window scene uses the existing Tidbit portrait, animated precipitation, a lamp, plant, record player, mug and books. Without fresh weather data the screen is explicitly labeled as a demo. The weather room uses the existing synthesized music engine, not recorded animal sounds. Press **HOME** again to return to the Stage. A tap of **OCT+** picks another destination, **OCT-** returns to the previous one, and holding **OCT+** for three seconds opens the Moon. Press **PLAY** on the Moon to hear an offline composition and play along on the white keys. Travel and Moon playback keep your saved song intact.
 
 The draft shows twelve Earth destinations. The Earth screen waits for a real reading before it displays weather or plays weather-driven music. Native Wi-Fi, live readings, and Wi-Fi setup are still in development.
 
