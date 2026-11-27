@@ -9,10 +9,10 @@ static char ssid[33],password[65];
 static const char alphabet[]="abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 !@#$%^&*()-_=+[]{};:'\",.<>/?\\|~`";
 static const char *const states[]={"OFF","STARTING","READY","JOINING","GETTING IP","CONNECTED","FAILED"};
 static void wipe_password(void){volatile char *p=password;for(unsigned i=0;i<sizeof(password);i++)p[i]=0;len=0;}
-static void join_selected(void){
+static void join_selected(int force_password){
  int secured=0;
  if(!plat_wifi_found(pick,ssid,0,&secured)){message="SCAN FIRST";return;}
- if(!secured||plat_wifi_kept(ssid)){message=plat_wifi_join(ssid,0)?"JOIN NOT READY":"";return;}
+ if(!secured||(!force_password&&plat_wifi_kept(ssid))){message=plat_wifi_join(ssid,0)?"JOIN NOT READY":"";return;}
  wipe_password();editing=1;choice=0;
 }
 void lw_wifi_leave(void){editing=0;wipe_password();}
@@ -21,7 +21,7 @@ int lw_wifi_step(void){
  int n=(int)sizeof(alphabet)-1;
  if(editing){
   if(d){choice=(choice+d)%n;if(choice<0)choice+=n;}
-  if(button_pressed(BTN_SEL)&&len<64){password[len++]=alphabet[choice];password[len]=0;}
+  if(button_pressed(BTN_SEL)&&len<63){password[len++]=alphabet[choice];password[len]=0;}
   if(button_pressed(BTN_EDIT)&&len)password[--len]=0;
   if(button_pressed(BTN_PLAY)){
    if(len<8)message="MINIMUM 8 CHARACTERS";
@@ -38,8 +38,9 @@ int lw_wifi_step(void){
   else message="WAIT FOR RADIO TO STOP";
  }
  if(button_pressed(BTN_SEL)){pick=0;message=plat_wifi_scan()?"TURN WI-FI ON FIRST":"";}
- if(button_pressed(BTN_SAVE))join_selected();
- return d||button_pressed(BTN_GLO)||button_pressed(BTN_SEL)||button_pressed(BTN_SAVE);
+ if(button_pressed(BTN_SAVE))join_selected(0);
+ if(button_pressed(BTN_EDIT))join_selected(1);
+ return d||button_pressed(BTN_GLO)||button_pressed(BTN_SEL)||button_pressed(BTN_SAVE)||button_pressed(BTN_EDIT);
 }
 static void clipped(int x,int y,const char *s,uint16_t color){
  char t[28];int n=0;
@@ -79,7 +80,7 @@ void lw_wifi_draw(void){
   clipped(8,y,name,WHITE);if(sec)text(214,y,"*",cyan,FONT_SMALL);
  }
  text(8,184,"SEL SCAN / SAVE JOIN",WHITE,FONT_SMALL);
- text(8,202,"GLO WI-FI ON/OFF",WHITE,FONT_SMALL);
+ text(8,202,"GLO ON/OFF / EDIT PASSWORD",WHITE,FONT_SMALL);
  text(8,222,"ARP RADIO / HOME NEXT",dim,FONT_SMALL);
 }
 
