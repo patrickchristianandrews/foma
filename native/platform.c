@@ -55,6 +55,7 @@ extern void lw_weather_service(void);
 extern void lw_wifi_autostart(void);
 extern int liquid_boot_complete(void);
 extern void lw_radio_mix(int32_t *,uint32_t,uint32_t);
+extern void lw_ocean_peak(unsigned);
 void lw_native_init(void){setup();}
 void lw_native_step(void){
  uint32_t raw=plat_buttons(),b=0,k=plat_keys();
@@ -78,6 +79,9 @@ void lw_native_render(int32_t *lr,uint32_t n,uint32_t gain){
   lr[i]=(s*(int32_t)gain/4096)*256;
  }
  lw_radio_mix(lr,n,gain);
+ unsigned peak=0;
+ for(uint32_t i=0;i<n*2u;i+=8){int32_t v=lr[i];unsigned a=(unsigned)(v<0?-v:v);if(a>peak)peak=a;}
+ lw_ocean_peak(peak);
 }
 void lw_native_panic(void){muted=1;}
 void lw_native_resume(void){muted=0;}
