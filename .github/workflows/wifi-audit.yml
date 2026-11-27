@@ -1,0 +1,92 @@
+name: Wi-Fi firmware three-part safety audit
+on:
+  push:
+    branches: [liquid-wave-fm1-development]
+    paths: ['native/**', 'tests/native-*.txt', '.github/workflows/wifi-audit.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: wifi-audit-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  installer:
+    name: 1 - Installer and recovery protocol
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch pinned upstream
+        run: |
+          git clone https://github.com/charlesvestal/fm1-base.git /tmp/base
+          git -C /tmp/base checkout 6d6ae6d874fb34e2bec3fc6043fa7d859b206462
+      - name: Verify actual published binary and installer metadata
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p /tmp/release
+          gh release download advanced-liquid-wave-wifi-experimental --repo "$GITHUB_REPOSITORY" --pattern 'Advanced-Liquid-Wave-WiFi-installer.zip' --pattern 'liquid-wave-wifi.fwsc' --dir /tmp/release
+          python3 - <<'PY'
+          import hashlib,json,pathlib,re,zipfile
+          p=pathlib.Path('/tmp/release')
+          raw=(p/'liquid-wave-wifi.fwsc').read_bytes()
+          z=zipfile.ZipFile(p/'Advanced-Liquid-Wave-WiFi-installer.zip')
+          assert z.read('firmware.fwsc')==raw
+          meta=json.loads(z.read('release.json'))
+          product=''.join(chr((raw[i*48+47]-i-1)&255) for i in range(20) if raw[i*48+47]!=125)
+          assert product==meta['product']=='FM-1_9600'
+          assert hashlib.sha256(raw).hexdigest()==meta['firmware_sha256']
+          assert b'FELUCCA-LOADER-1' in raw
+          html=z.read('index.html').decode()
+          assert 'id="go"' in html and '"pkg": "firmware.fwsc"' in html
+          assert meta['firmware_sha256'] in html or meta['product'] in html
+          print('PASS: published installer and direct firmware contain the same device package')
+          # Check every settings object is in a permitted sector pair; no overlap.
+          hdr=pathlib.Path('native/app.h').read_text()
+          offsets=[int(v,16) for v in re.findall(r'0x([0-9a-fA-F]+)u',re.search(r'APP_STORE_MAP\s*\{([^}]+)\}',hdr)[1])]
+          assert len(offsets)==6
+          for n in offsets:
+              assert n%4096==0 and (0x97000<=n and n+8192<=0xe0000 or n==0xfc000)
+          assert all(abs(a-b)>=8192 for i,a in enumerate(offsets) for b in offsets[i+1:])
+          print('PASS: non-overlapping permitted flash settings sectors')
+          PY
+      - name: Simulate update protocol and recognized flash chips
+        run: |
+          cd /tmp/base
+          python3 tests/install_test.py
+          cc -std=c99 -Wall -Wextra -Werror tests/flash_ok_test.c -o /tmp/flash-check
+          /tmp/flash-check
+  host:
+    name: ${{ matrix.audit }}
+    strategy:
+      fail-fast: false
+      matrix:
+        audit: ['2 - Sound and persistence', '3 - Wi-Fi and radio lifecycle']
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch exact pinned dependencies
+        run: |
+          git clone https://github.com/charlesvestal/fm1-base.git /tmp/base
+          git -C /tmp/base checkout 6d6ae6d874fb34e2bec3fc6043fa7d859b206462
+          git -C /tmp/base submodule update --init --recursive
+          git clone https://github.com/charlesvestal/fm1-radio.git /tmp/radio
+          git -C /tmp/radio checkout 494c2a655f4cf3bd5130886133b6ab67103c6bf9
+          python3 native/prepare-radio.py /tmp/radio
+          python3 -m pip install --break-system-packages Pillow
+          python3 /tmp/base/tools/build.py "$GITHUB_WORKSPACE/native" --host
+          mkdir -p /tmp/out
+      - name: Sound and save failures
+        if: matrix.audit == '2 - Sound and persistence'
+        run: |
+          native/build/host/liquid-wave-wifi_host tests/native-wifi-smoke.txt /tmp/out
+      - name: Wi-Fi scan, password cancellation, joining and unavailable stream
+        if: matrix.audit == '3 - Wi-Fi and radio lifecycle'
+        run: native/build/host/liquid-wave-wifi_host tests/native-wifi-audit.txt /tmp/out
+      - name: Actual MP3 decoding and audio playback from fixture
+        if: matrix.audit == '3 - Wi-Fi and radio lifecycle'
+        run: |
+          ffmpeg -hide_banner -loglevel error -f lavfi -i sine=frequency=440:sample_rate=44100 -t 4 -ac 2 -b:a 128k -write_xing 0 -id3v2_version 0 /tmp/radio-fixture.mp3
+          LW_RADIO_FIXTURE=/tmp/radio-fixture.mp3 native/build/host/liquid-wave-wifi_host tests/native-radio-audit.txt /tmp/out
