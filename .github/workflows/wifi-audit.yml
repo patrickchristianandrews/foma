@@ -2,7 +2,7 @@ name: Wi-Fi firmware three-part safety audit
 on:
   push:
     branches: [liquid-wave-fm1-development]
-    paths: ['native/**', 'tests/native-*.txt', '.github/workflows/wifi-audit.yml']
+    paths: ['native/**', 'tests/native-*.txt', '.github/workflows/wifi-audit.yml', '.github/workflows/native-wifi.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -88,5 +88,9 @@ jobs:
       - name: Actual MP3 decoding and audio playback from fixture
         if: matrix.audit == '3 - Wi-Fi and radio lifecycle'
         run: |
+          if ! command -v ffmpeg >/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y ffmpeg
+          fi
           ffmpeg -hide_banner -loglevel error -f lavfi -i sine=frequency=440:sample_rate=44100 -t 4 -ac 2 -b:a 128k -write_xing 0 -id3v2_version 0 /tmp/radio-fixture.mp3
           LW_RADIO_FIXTURE=/tmp/radio-fixture.mp3 native/build/host/liquid-wave-wifi_host tests/native-radio-audit.txt /tmp/out
