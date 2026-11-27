@@ -73,9 +73,10 @@ void lw_offworld_input(void){
 }
 void lw_offworld_draw(void){
  uint16_t neon=RGB(70,220,255),pink=RGB(255,90,180);
- clear(BLACK);text(8,5,"7 / OFFWORLD",neon,FONT_BIG);
+ clear(BLACK);text(8,5,"7 / NIGHT DRIFT",neon,FONT_BIG);
  if(mode!=2){text(8,65,"ENGINE UNAVAILABLE",pink,FONT_SMALL);text(8,92,"MEMORY OR NETWORK BUSY",WHITE,FONT_SMALL);text(8,212,"PLAY RETRY / HOME EXIT",WHITE,FONT_SMALL);return;}
- text(8,36,PRESETS[preset].name,pink,FONT_SMALL);
+ static const char *const names[]={"MIDNIGHT BRASS","NEON TOWER","PYRAMID HALL","LAST SUNRISE","SKYLINE","DEEP SECTOR","ACID SKY"};
+ text(8,36,names[preset],pink,FONT_SMALL);
  for(int i=0;i<4;i++){
   int y=65+i*31;char val[12];format_int(val,macros[i]);
   text(8,y,MACROS[i].name,WHITE,FONT_SMALL);text(186,y,val,neon,FONT_SMALL);
