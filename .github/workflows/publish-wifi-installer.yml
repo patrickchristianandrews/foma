@@ -1,0 +1,60 @@
+name: Publish compiled experimental Wi-Fi installer
+on:
+  push:
+    branches: [liquid-wave-fm1-development]
+    paths: ['.github/workflows/publish-wifi-installer.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Retrieve exact successful Wi-Fi build
+        run: |
+          gh run download 45926545716 --repo "$GITHUB_REPOSITORY" --name liquid-wave-wifi-experimental --dir /tmp/wifi-package
+          test "$(stat -c%s /tmp/wifi-package/liquid-wave-wifi.fwsc)" = 611496
+          git clone https://github.com/charlesvestal/fm1-base.git /tmp/fm1-base
+          git -C /tmp/fm1-base checkout 6d6ae6d874fb34e2bec3fc6043fa7d859b206462
+      - name: Assemble upstream USB installer with exact Wi-Fi package
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, pathlib, re, shutil, zipfile
+          base=pathlib.Path('/tmp/fm1-base')
+          out=pathlib.Path('/tmp/wifi-installer')
+          out.mkdir()
+          fw=pathlib.Path('/tmp/wifi-package/liquid-wave-wifi.fwsc')
+          raw=fw.read_bytes()
+          product=''.join(chr((raw[i*48+47]-i-1)&255) for i in range(20) if raw[i*48+47]!=125)
+          assert product=='FM-1_9600', product
+          assert b'FELUCCA-LOADER-1' in raw
+          shutil.copyfile(fw,out/'firmware.fwsc')
+          def strip(s):
+              return re.sub(r'^import .*?;\n','',re.sub(r'^export\s+','',s,flags=re.M),flags=re.M)
+          lib='\n'.join(strip((base/'web'/name).read_text()) for name in ('fm1pkg.js','fm1ota.js'))
+          html=(base/'web/installer.html').read_text()
+          meta={'version':'Experimental Wi-Fi + Radio','product':product,'pkg':'firmware.fwsc','backup':False,'boot':None}
+          assert html.count('/*LIB*/')==html.count('/*META*/')==1
+          html=html.replace('/*LIB*/',lib).replace('/*META*/',json.dumps(meta))
+          for key,value in {'NAME':'Advanced Liquid Wave Wi-Fi + Radio','REPO':'https://github.com/patrickchristianandrews/foma','REPO_SHORT':'github.com/patrickchristianandrews/foma','LICENSE':'GPL-3.0 / MPL-2.0 components','CREDITS':' Native Wi-Fi and radio integration, based on FM1 Radio by Charles Vestal.'}.items():
+              html=html.replace('{{'+key+'}}',value)
+          assert not re.search(r'\{\{[A-Z_]+\}\}',html)
+          html=re.sub(r'(<body[^>]*>)',r'\1<p style="margin:12px;padding:12px;border:2px solid #b77836"><strong>Experimental Wi-Fi firmware:</strong> compiled successfully; real hardware and radio playback not yet tested. Back up your FM-1 first. This edition excludes Bluetooth, AAC and Frodhes. <a href="/liquid-wave/">Back to Liquid Wave</a></p>',html,count=1)
+          (out/'index.html').write_text(html)
+          (out/'release.json').write_text(json.dumps({'revision':'28a4ab3b510168f47e5b496be9ea0426d9b8582c','product':product,'firmware_sha256':hashlib.sha256(raw).hexdigest(),'hardware_tested':False},indent=2))
+          with zipfile.ZipFile('/tmp/Advanced-Liquid-Wave-WiFi-installer.zip','w',zipfile.ZIP_DEFLATED) as z:
+              for file in sorted(out.iterdir()):
+                  z.write(file,file.name)
+          PY
+      - name: Publish separately from standard firmware
+        run: |
+          tag=advanced-liquid-wave-wifi-experimental
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$tag" /tmp/Advanced-Liquid-Wave-WiFi-installer.zip /tmp/wifi-package/liquid-wave-wifi.fwsc --clobber
+          else
+            gh release create "$tag" /tmp/Advanced-Liquid-Wave-WiFi-installer.zip /tmp/wifi-package/liquid-wave-wifi.fwsc --target 28a4ab3b510168f47e5b496be9ea0426d9b8582c --prerelease --title "Advanced Liquid Wave Wi-Fi + Radio (experimental)" --notes "Exact successful hardware build 45926545716. Native Wi-Fi and MP3 radio; Bluetooth, Frodhes and AAC excluded. Physical hardware unverified. Separate edition; standard firmware unchanged."
+          fi
