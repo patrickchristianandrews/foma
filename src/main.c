@@ -535,7 +535,7 @@ static void battery_hud(void){
  int n=battery_bars();
  rect(207,0,33,18,BLACK);
  frame(208,3,28,12,WHITE);rect(236,6,3,6,WHITE);
- if(n<0){text(219,1,"?",WHITE,FONT_SMALL);return;}
+ if(n<0){text(219,1,"?",page==HOME?RGB(222,214,255):WHITE,FONT_SMALL);return;}
  for(int i=0;i<n;i++)rect(211+i*8,6,6,6,n==1?RGB(255,155,65):RGB(100,220,150));
  if(n==0)rect(211,6,2,6,RGB(255,70,70));
 }
@@ -747,13 +747,13 @@ static void stage_plane(uint32_t now){
  /* clipped banner and tow rope, with lettering only where fully visible */
  int lo=clamp(left,0,240),hi=clamp(left+w,0,240);
  if(hi>lo){
-  rect(lo,57,hi-lo,22,RGB(255,233,173));
+  rect(lo,57,hi-lo,22,RGB(56,39,79));
   line(lo,57,hi-1,57,RGB(240,143,228));
   line(lo,78,hi-1,78,RGB(240,143,228));
  }
  for(int i=0;msg[i];i++){
   int tx=left+6+i*8;char letter[2]={msg[i],0};
-  if(tx>=0&&tx<=232)text(tx,60,letter,RGB(56,33,79),FONT_SMALL);
+  if(tx>=0&&tx<=232)text(tx,60,letter,RGB(255,222,237),FONT_SMALL);
  }
  lo=clamp(x+26,0,239);hi=clamp(left,0,239);
  if(left>0&&x+26<240&&hi>lo)line(lo,65,hi,68,RGB(200,215,235));
@@ -1388,13 +1388,15 @@ static void hud(void){
   if(page==SEQ){for(int i=0;i<NC;i++)portrait_at(i,3+30*i,151);text(8,175,"ARP NEW SEQ / K4 PART",RGB(190,120,255),FONT_SMALL);}
  }
 
- rect(0,0,240,48,BLACK);text(0,0,"LIQUID WAVE",RGB(190,120,255),FONT_SMALL);text(125,0,pageName[page],WHITE,FONT_SMALL);battery_hud();
- text(0,16,liquid_song_style_name(p.style),WHITE,FONT_SMALL);char b[12];format_int(b,p.bpm);text(112,16,b,WHITE,FONT_SMALL);if(page==HOME)text(168,16,"BETA 2",RGB(190,120,255),FONT_SMALL);
+ uint16_t titleInk=page==HOME?RGB(225,195,255):RGB(190,120,255),labelInk=page==HOME?RGB(194,229,255):WHITE;
+ rect(0,0,240,48,BLACK);text(0,0,"LIQUID WAVE",titleInk,FONT_SMALL);text(125,0,pageName[page],labelInk,FONT_SMALL);battery_hud();
+ text(0,16,liquid_song_style_name(p.style),page==HOME?RGB(255,211,230):WHITE,FONT_SMALL);char b[12];format_int(b,p.bpm);text(112,16,b,page==HOME?RGB(199,247,220):WHITE,FONT_SMALL);if(page==HOME)text(168,16,"BETA 2",titleInk,FONT_SMALL);
  const char *guide=page==SECTION_SOUND?"K1 SECTION / K2 PARAM":
   page==SEQ?"SEL TRACK / ALGO SOUND":page==FX?"K2 PARAM / K3 VALUE":page==ENV?"K2 ATTACK / K4 TAIL":page==MOTION?"K2 RATE / K3 DEPTH":(page==EDIT||page==HOME||page==MIX)?"SELECT / ALGO SOUND":!p.sel&&page!=GLOBAL&&page!=SEQ?"TEMPO  LEVEL DRIVE TAIL":knobGuide[page];
- text(0,32,guide,WHITE,FONT_SMALL);
- rect(0,194,240,46,BLACK);text(0,194,sections[section],WHITE,FONT_SMALL);
- text(96,194,names[p.sel],colors[p.sel],FONT_SMALL);text(192,194,recording?"REC":"",WHITE,FONT_SMALL);
+ text(0,32,guide,page==HOME?RGB(255,228,190):WHITE,FONT_SMALL);
+ rect(0,194,240,46,BLACK);text(0,194,sections[section],page==HOME?RGB(194,229,255):WHITE,FONT_SMALL);
+ static const uint16_t pastelTrack[8]={RGB(255,211,181),RGB(221,192,255),RGB(255,239,178),RGB(190,227,255),RGB(255,192,224),RGB(191,243,214),RGB(255,220,189),RGB(219,201,255)};
+ text(96,194,names[p.sel],page==HOME?pastelTrack[p.sel]:colors[p.sel],FONT_SMALL);text(192,194,recording?"REC":"",page==HOME?RGB(255,194,218):WHITE,FONT_SMALL);
  for(int i=0;i<16;i++){int d=p.pat[section][p.sel][i];uint16_t col=(p.sel?d!=EMPTY:d!=0)?colors[p.sel]:RGB(35,35,35);rect(i*15,218,12,12,col);if((playing&&i==step)||(page==SEQ&&i==cursor))frame(i*15,216,14,16,WHITE);}
 }
 static int load_song_settings(const SavedSong *saved,uint32_t magic){
@@ -1458,6 +1460,10 @@ static void panel_lights(uint32_t now){
  uint32_t mask=active|((now%1000u<600u)?available:0u)|(buttons()&available);
  led_backlight(1);
  for(int b=0;b<BTN_COUNT;b++)led_button(b,(mask>>b)&1u);
+ /* Neon Tides owns its guided key LEDs. */
+#if defined(FOMA_NATIVE_WIFI) && FOMA_NATIVE_WIFI
+ if(page==OCEAN_VIS)return;
+#endif
  uint32_t held=keys();
  for(int k=0;k<KEY_COUNT;k++)led_key(k,(held>>k)&1u);
 }

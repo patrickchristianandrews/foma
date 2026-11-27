@@ -209,6 +209,7 @@ int lw_offworld_render(int32_t *lr,uint32_t n,uint32_t gain){
 void lw_offworld_input(void){
  if(mode!=2){
   if(button_pressed(BTN_PLAY)||(init_error==1&&(int32_t)(millis()-retry_at)>=0))lw_offworld_enter();
+  for(int k=0;k<KEY_COUNT;k++)led_key(k,0);
   return;
  }
  uint32_t now=millis();
@@ -255,9 +256,11 @@ void lw_offworld_input(void){
   led_key(k,!!(latched&(1u<<k)));
  }
  lesson_input(now,pressed);
+ /* Steady hints in the physical C4-B4 octave. Held keys remain lit. */
  if((lesson&&!lesson_wait)||(backing_style&&!world_page)){
   unsigned target=lesson&&!lesson_wait?lesson_target():backing_mask();
-  for(int k=0;k<KEY_COUNT;k++)led_key(k,!!(latched&(1u<<k))||((target&PC((KEY_FIRST_NOTE+k)%12))&&((now/170u)%2u==0)));}
+  for(int k=0;k<KEY_COUNT;k++){int midi=KEY_FIRST_NOTE+k;
+   led_key(k,!!(latched&(1u<<k))||(midi>=60&&midi<=71&&(target&PC(midi%12))));}}
  uint8_t st,a,b;
  while(midi_read(&st,&a,&b)){
   if((st&0xf0)==0x90&&b){if(!lesson)event_start(now,a);backing_play(now,a);eng_note_on(128+a,(float)a,(float)b/127.0f);}
@@ -497,6 +500,9 @@ static void backing_guide(uint32_t now,uint16_t neon,uint16_t pink,int y){
  for(int pc=0;pc<12;pc++)if(mask&PC(pc)){p=pitch_names[pc];while(*p)chord[n++]=*p++;chord[n++]=' ';}
  chord[n]=0;
  text(5,y,chord,neon,FONT_SMALL);
+ unsigned period=backing_period(),remain=(int32_t)(backing_due-now)>0?backing_due-now:0;
+ if(remain>period)remain=period;
+ rect(183,y+4,50,4,RGB(40,48,64));rect(183,y+4,50*(period-remain)/period,4,neon);
  if(backing_hits&&now-backing_flash<350u)text(5,y+15,"IN HARMONY!",neon,FONT_SMALL);
  else text(5,y+15,"FILL IN LIT NOTES",WHITE,FONT_SMALL);
  format_int(score,(int)backing_hits);text(205,y+15,score,pink,FONT_SMALL);

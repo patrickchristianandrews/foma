@@ -172,10 +172,16 @@ expect offworld_active 1
 tap ENV
 expect offworld_lesson 1
 expect offworld_scene 0
+wait 300
+expect native_key_lights 128
 tapkey 0
 expect offworld_lesson_step 0
 tapkey 7
+wait 300
+expect native_key_lights 512
 tapkey 9
+wait 300
+expect native_key_lights 2048
 tapkey 11
 tapkey 14
 expect offworld_lesson_step 4
@@ -330,6 +336,7 @@ peakreset
 wait 1200
 expect offworld_backing_notes >0
 expect peak_db_min -55
+expect native_key_lights 67712
 tapkey 7
 expect offworld_backing_hits >0
 tap LFO
@@ -343,5 +350,7 @@ expect offworld_backing 4
 wait 800
 tap LFO
 expect offworld_backing 0
+wait 300
+expect native_key_lights 0
 tap HOME
 expect offworld_active 0

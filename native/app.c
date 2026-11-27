@@ -38,7 +38,9 @@ extern int lw_offworld_expect(const char *,int *);
 extern int lw_wifi_expect(const char *,int *);
 extern int lw_radio_expect(const char *,int *);
 extern int lw_loop_expect(const char *,int *);
+extern uint32_t lw_native_key_lights(void);
 static int app_expect(const char *name,int *v){
+ if(!strcmp(name,"native_key_lights")){*v=(int)lw_native_key_lights();return 1;}
  if(!strcmp(name,"wifi_state")){*v=plat_wifi_state();return 1;}
  return lw_offworld_expect(name,v)||lw_wifi_expect(name,v)||lw_radio_expect(name,v)||lw_loop_expect(name,v);
 }

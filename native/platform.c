@@ -26,6 +26,9 @@ int button_released(int b){return bit(up_btn,b,BTN_COUNT);}
 int32_t encoder(int e){return (unsigned)e<ENC_COUNT?delta[e]:0;}
 uint32_t master_knob(void){return plat_master()*1023u/4096u;}
 void led_key(int k,int on){if((unsigned)k<KEY_COUNT){uint32_t m=1u<<k;lights_key=on?lights_key|m:lights_key&~m;}}
+#ifdef PLAT_HOST
+uint32_t lw_native_key_lights(void){return lights_key;}
+#endif
 void led_button(int b,int on){if((unsigned)b<BTN_COUNT){uint32_t m=1u<<button_map[b];lights_btn=on?lights_btn|m:lights_btn&~m;}}
 void led_backlight(int level){glow=level<0?0:level>2?2:level;}
 int midi_read(uint8_t *status,uint8_t *d1,uint8_t *d2){
