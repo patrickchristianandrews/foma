@@ -40,6 +40,12 @@ jobs:
         run: |
           python3 "$RUNNER_TEMP/fm1-base/tools/build.py" "$GITHUB_WORKSPACE/native"
           test -s native/build/liquid-wave-wifi.fwsc
+      - name: Save compiled experimental firmware (not hardware verified)
+        uses: actions/upload-artifact@v4
+        with:
+          name: liquid-wave-wifi-experimental
+          path: native/build/liquid-wave-wifi.fwsc
+          if-no-files-found: error
       - name: Preserve build diagnostics only (not a release)
         if: always()
         uses: actions/upload-artifact@v4
