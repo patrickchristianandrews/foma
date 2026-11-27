@@ -176,6 +176,8 @@ wait 300
 expect native_key_lights 128
 tapkey 0
 expect offworld_lesson_step 0
+expect offworld_lesson_errors 1
+expect native_key_lights 128
 tapkey 7
 wait 300
 expect native_key_lights 512
@@ -219,7 +221,9 @@ wait 5600
 expect offworld_scene 3
 expect offworld_lesson_step 0
 key 7 down
+expect offworld_lesson_chord_pos 1
 key 11 down
+expect offworld_lesson_chord_pos 2
 key 14 down
 key 7 up
 key 11 up
@@ -336,9 +340,23 @@ peakreset
 wait 1200
 expect offworld_backing_notes >0
 expect peak_db_min -55
-expect native_key_lights 67712
+expect native_key_lights 65536
 tapkey 7
-expect offworld_backing_hits >0
+expect offworld_guide_step 0
+expect offworld_guide_errors 1
+expect offworld_guide_feedback -1
+expect native_key_lights 65536
+tapkey 16
+expect offworld_guide_step 1
+expect native_key_lights 128
+tapkey 7
+expect offworld_guide_step 2
+expect native_key_lights 2048
+tapkey 11
+expect offworld_backing_hits 3
+wait 700
+expect offworld_guide_step 0
+expect native_key_lights 4096
 tap LFO
 expect offworld_backing 2
 wait 800
