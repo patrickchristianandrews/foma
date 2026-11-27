@@ -20,6 +20,11 @@ jobs:
           git clone https://github.com/charlesvestal/fm1-base.git "$RUNNER_TEMP/fm1-base"
           git -C "$RUNNER_TEMP/fm1-base" checkout 6d6ae6d874fb34e2bec3fc6043fa7d859b206462
           git -C "$RUNNER_TEMP/fm1-base" submodule update --init --recursive
+      - name: Fetch and prepare pinned FM1 Radio modules
+        run: |
+          git clone https://github.com/charlesvestal/fm1-radio.git "$RUNNER_TEMP/fm1-radio"
+          git -C "$RUNNER_TEMP/fm1-radio" checkout 494c2a655f4cf3bd5130886133b6ab67103c6bf9
+          python3 native/prepare-radio.py "$RUNNER_TEMP/fm1-radio"
       - name: Install host build dependencies
         run: python3 -m pip install --break-system-packages Pillow
       - name: Compile native host simulator
