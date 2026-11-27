@@ -7,6 +7,7 @@
 #include "app.h"
 #include "offworld/engine.h"
 extern int lw_offworld_alloc(void);
+extern unsigned lw_offworld_failed_bytes(void);
 extern void lw_offworld_free(void);
 extern int lw_radio_can_power_off(void);
 extern void lw_offworld_echo_suspend(void);
@@ -14,6 +15,9 @@ extern void lw_offworld_echo_resume(void);
 /* 0 normal; 1 transition/failed (silence); 2 OFFWORLD active.
  * Audio IRQ never allocates/frees; mode changes are serialized by plat_lock. */
 static volatile int mode;
+/* Diagnostic reason is main-loop owned: 1 network draining, 2 heap allocation. */
+static int init_error;
+static uint32_t retry_at;
 static int preset,octave,drone,epic,memory,scene,tone,vib;
 static uint8_t macros[4];
 static uint32_t latched;
@@ -23,10 +27,11 @@ static void set_mode(int v){uint32_t flags=plat_lock();mode=v;plat_unlock(flags)
 static void sound(void){eng_sound(preset,macros,tone/64.0f,vib/127.0f,PRESS_FILTER,0.7f);}
 static void select_preset(int p){preset=(p%NPRESETS+NPRESETS)%NPRESETS;for(int i=0;i<4;i++)macros[i]=PRESETS[preset].m[i];sound();}
 void lw_offworld_enter(void){
- set_mode(1);
- if(!lw_radio_can_power_off())return;
+ if(mode==2)return;
+ set_mode(1);init_error=0;
+ if(!lw_radio_can_power_off()){init_error=1;retry_at=millis()+500u;return;}
  lw_offworld_echo_suspend();
- if(!lw_offworld_alloc()){lw_offworld_echo_resume();return;}
+ if(!lw_offworld_alloc()){init_error=2;lw_offworld_echo_resume();return;}
  octave=drone=epic=memory=scene=tone=0;vib=38;latched=0;
  select_preset(0);eng_world(0,0.25f);
  set_mode(2);
@@ -34,7 +39,7 @@ void lw_offworld_enter(void){
 void lw_offworld_leave(void){
  int was=mode;set_mode(1);
  if(was==2){lw_offworld_free();lw_offworld_echo_resume();}
- set_mode(0);
+ init_error=0;set_mode(0);
 }
 int lw_offworld_render(int32_t *lr,uint32_t n,uint32_t gain){
  if(!mode)return 0;
@@ -42,7 +47,10 @@ int lw_offworld_render(int32_t *lr,uint32_t n,uint32_t gain){
  return 1;
 }
 void lw_offworld_input(void){
- if(mode!=2){if(button_pressed(BTN_PLAY))lw_offworld_enter();return;}
+ if(mode!=2){
+  if(button_pressed(BTN_PLAY)||(init_error==1&&(int32_t)(millis()-retry_at)>=0))lw_offworld_enter();
+  return;
+ }
  int d=encoder(ENC_PRESETS);
  if(d)select_preset(preset+d);
  for(int i=0;i<4;i++)if((d=encoder(knobs[i]))){macros[i]=(uint8_t)bound((int)macros[i]+d,0,127);sound();}
@@ -105,7 +113,12 @@ static void city_draw(uint32_t now){
 void lw_offworld_draw(void){
  uint16_t neon=RGB(70,220,255),pink=RGB(255,90,180);
  clear(BLACK);text(8,3,"NEON TIDES",neon,FONT_BIG);
- if(mode!=2){text(8,65,"ENGINE UNAVAILABLE",pink,FONT_SMALL);text(8,92,"MEMORY OR NETWORK BUSY",WHITE,FONT_SMALL);text(8,212,"PLAY RETRY / HOME EXIT",WHITE,FONT_SMALL);return;}
+ if(mode!=2){
+  if(init_error==1){text(8,65,"WAITING FOR NETWORK",pink,FONT_SMALL);text(8,92,"AUTO RETRY",WHITE,FONT_SMALL);}
+  else if(init_error==2){char bytes[12];format_int(bytes,(int)lw_offworld_failed_bytes());text(8,65,"AUDIO RAM ALLOCATION FAILED",pink,FONT_SMALL);text(8,92,"FAILED BLOCK BYTES",WHITE,FONT_SMALL);text(8,112,bytes,neon,FONT_SMALL);}
+  else text(8,65,"INITIALIZING",pink,FONT_SMALL);
+  text(8,212,"PLAY RETRY / HOME EXIT",WHITE,FONT_SMALL);return;
+ }
  static const char *const names[]={"MIDNIGHT BRASS","NEON TOWER","PYRAMID HALL","LAST SUNRISE","SKYLINE","DEEP SECTOR","ACID SKY"};
  text(8,30,names[preset],pink,FONT_SMALL);
  city_draw(millis());
@@ -124,6 +137,7 @@ void lw_offworld_draw(void){
 int lw_offworld_expect(const char *name,int *v){
  if(!strcmp(name,"offworld_active"))*v=mode==2;
  else if(!strcmp(name,"offworld_notes"))*v=mode==2?(int)eng_notes():0;
+ else if(!strcmp(name,"offworld_error"))*v=init_error;
  else return 0;return 1;
 }
 #endif

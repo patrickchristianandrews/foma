@@ -7,6 +7,7 @@ tap HOME
 tap HOME
 expect ocean_page 1
 expect offworld_active 1
+expect offworld_error 0
 peakreset
 tapkey w0
 wait 1000
@@ -21,3 +22,19 @@ expect offworld_active 0
 expect ocean_page 0
 tapkey w0
 wait 500
+
+# Re-enter after releasing engine buffers; verify second initialization and audio.
+tap HOME
+tap HOME
+tap HOME
+tap HOME
+tap HOME
+tap HOME
+expect offworld_active 1
+expect offworld_error 0
+peakreset
+tapkey w0
+wait 1000
+expect peak_db_min -55
+tap HOME
+expect offworld_active 0

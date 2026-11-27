@@ -10,21 +10,22 @@ dst.mkdir(exist_ok=True)
 s=(src/'dsp/engine.c').read_text()
 shutil.copyfile(src/'dsp/engine.h',dst/'engine.h')
 shutil.copyfile(src/'LICENSE',dst/'LICENSE')
-# Memory-constrained profile for the shared Wi-Fi firmware. 1.5 s grain
-# capture, 0.24/0.36 s stereo delay, shorter eight-line reverb topology.
-# The decay and freeze curves are unchanged, and all samples remain 16-bit
-# except the upstream mu-law grain capture. Use the same profile on host.
+# Low-heap profile for the Wi-Fi device. Keep all eight voices and effects,
+# using shorter physical delay/reverb lines and ~0.37 s grain capture.
+# MEM_N must exceed the upstream 6000-sample grain-position guard.
+# Use exactly the same profile for the host regression and device build.
 for old,new in [
- ('#define MEM_N 66150u','#define MEM_N 33075u'),
- ('#define DL_L 15876u','#define DL_L 10584u'),
- ('#define DL_R 23814u','#define DL_R 15876u'),
+ ('#define MEM_N 66150u','#define MEM_N 8192u'),
+ ('#define DL_L 15876u','#define DL_L 2205u'),
+ ('#define DL_R 23814u','#define DL_R 3307u'),
  ('{1153, 1361, 1597, 1847, 2083, 2399, 2711, 3023}',
-  '{577, 683, 797, 929, 1049, 1201, 1361, 1511}'),
- ('#define RV_TOTAL 39000u','#define RV_TOTAL 19600u'),
+  '{193, 227, 269, 311, 349, 401, 457, 509}'),
+ ('#define RV_TOTAL 39000u','#define RV_TOTAL 6800u'),
 ]:
     assert s.count(old)==1,old
     s=s.replace(old,new)
-assert sum(int(x*2.4)+8 for x in (577,683,797,929,1049,1201,1361,1511))<=19600
+assert 8192>6000
+assert sum(int(x*2.4)+8 for x in (193,227,269,311,349,401,457,509))<=6800
 # Never advance the producer ring into the reader when the input queue fills.
 old='static void commit(void) { q_w = (q_w + 1u) % NQ; }'
 assert s.count(old)==1
@@ -67,5 +68,10 @@ s=s.replace('#include "plat.h"','#include "plat.h"\n#include <stdlib.h>')
 s=s.replace('on2 = plat_cpu2_on() && n == NBLK_USE && plat_cpu2_run(job_voices, vb_w);','on2 = 0;')
 s=s.replace('if (plat_cpu2_wait() != 0)','if (0)')
 s+='\nvoid lw_offworld_free(void){\n'+''.join(f' free(ow_{n}); ow_{n}=0;\n' for n in names)+'}\n'
-s+='int lw_offworld_alloc(void){\n'+''.join(f' ow_{n}=malloc(sizeof *ow_{n}); if(!ow_{n})goto fail;\n' for n in names)+' p_seq=p_took=0; notes=thunders=0; duck_on=0; vb_w=vb_full=0; eng_init(); return 1;\nfail: lw_offworld_free(); return 0;\n}\n'
+s+='static unsigned ow_failed_bytes;\nunsigned lw_offworld_failed_bytes(void){return ow_failed_bytes;}\n'
+# Request the big delay and capture buffers first, before small allocations.
+first=['rv_mem','mem_buf','ens_buf','dl_r','dl_l','vb_l','vb_r','ap_buf']
+order=first+[n for n in names if n not in first]
+assert sorted(order)==sorted(names)
+s+='int lw_offworld_alloc(void){\n ow_failed_bytes=0;\n'+''.join(f' ow_{n}=malloc(sizeof *ow_{n}); if(!ow_{n}){{ow_failed_bytes=(unsigned)sizeof *ow_{n};goto fail;}}\n' for n in order)+' p_seq=p_took=0; notes=thunders=0; duck_on=0; vb_w=vb_full=0; eng_init(); return 1;\nfail: lw_offworld_free(); return 0;\n}\n'
 (dst/'engine.c').write_text(s)
