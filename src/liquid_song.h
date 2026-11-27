@@ -8,6 +8,9 @@
 #define LW_STEPS 16
 #define LW_ARRANGEMENT 8
 #define LW_REST 255
+#define LW_STYLE_COUNT 36
+int liquid_song_major(uint8_t style);
+const char *liquid_song_style_name(uint8_t style);
 
 typedef struct {
     int8_t root;

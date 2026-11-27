@@ -20,8 +20,45 @@ static const Style styles[] = {
         EVENS|STEP(3)|STEP(11),STEP(0)|STEP(3)|STEP(6)|STEP(8)|STEP(10)|STEP(12)|STEP(14),
         STEP(0)|STEP(6)|STEP(10)},
     {68,82,  {{0,4,5,3},{0,5,3,4}}, STEP(0)|STEP(8),STEP(8),QUARTERS,STEP(0)|STEP(8),STEP(0)},
-    {120,128,{{0,0,5,6},{0,3,0,4}}, QUARTERS,BACKBEAT,OFFBEAT,OFFBEAT,OFFBEAT}
+    {120,128,{{0,0,5,6},{0,3,0,4}}, QUARTERS,BACKBEAT,OFFBEAT,OFFBEAT,OFFBEAT},
+    {82,96, {{0,5,2,6},{0,3,5,4}}, 0x549u,0x1010u,0x5555u,0x511u,0x101u},
+    {72,94, {{1,5,3,4},{0,5,4,3}}, 0x905u,0x1010u,0x4445u,0x1111u,0x4141u},
+    {85,108, {{0,5,6,4},{0,3,0,6}}, 0x1249u,0x1010u,0x555du,0x1249u,0x401u},
+    {68,100, {{0,3,5,4},{0,5,2,6}}, 0x941u,0x1010u,0x5455u,0x911u,0x501u},
+    {92,110, {{0,3,0,4},{0,5,6,3}}, 0x505u,0x1010u,0x5555u,0x505u,0x1101u},
+    {80,98, {{0,5,2,4},{0,3,6,3}}, 0x529u,0x1010u,0x5755u,0x529u,0x401u},
+    {130,164, {{0,5,6,5},{0,3,0,6}}, 0x489u,0x100u,0xffffu,0x489u,0x101u},
+    {132,150, {{0,6,3,5},{0,5,0,6}}, 0x1825u,0x808u,0xb5d5u,0x1825u,0x101u},
+    {66,88, {{1,5,3,4},{2,5,4,3}}, 0x849u,0x1010u,0x4545u,0x941u,0x505u},
+    {65,85, {{2,5,3,4},{0,5,2,4}}, 0x501u,0x1010u,0x4444u,0x101u,0x105u},
+    {84,106, {{0,3,4,0},{1,5,3,4}}, 0x145u,0x1010u,0x5555u,0x1151u,0x4445u},
+    {80,118, {{0,3,4,0},{2,5,4,0}}, 0x111u,0x1010u,0x5555u,0x1111u,0x1115u},
+    {108,126, {{0,5,4,3},{2,5,0,4}}, 0x1111u,0x1010u,0x4444u,0x5555u,0x4444u},
+    {112,124, {{0,3,5,4},{0,5,2,6}}, 0x1111u,0x1010u,0x4444u,0x4444u,0x410u},
+    {122,132, {{0,0,3,4},{0,0,6,5}}, 0x1111u,0x1010u,0x5554u,0x5454u,0x44u},
+    {128,148, {{0,0,0,5},{0,3,0,0}}, 0x1111u,0x1010u,0xddddu,0x5555u,0x100u},
+    {132,150, {{0,5,3,4},{0,5,6,4}}, 0x1111u,0x1010u,0x4444u,0xffffu,0x1111u},
+    {160,180, {{0,5,3,6},{0,3,5,4}}, 0x401u,0x1040u,0xffffu,0x5555u,0x101u},
+    {138,150, {{0,0,3,5},{0,0,6,3}}, 0x401u,0x100u,0x5455u,0x509u,0x101u},
+    {72,94, {{0,3,4,0},{0,5,4,3}}, 0x100u,0x100u,0x5555u,0x1051u,0x4444u},
+    {90,108, {{0,5,3,4},{0,3,5,6}}, 0x1111u,0x4044u,0x5555u,0x505u,0x4444u},
+    {94,118, {{0,5,4,3},{0,3,4,0}}, 0x529u,0x2084u,0x5555u,0x2929u,0x4445u},
+    {108,116, {{0,3,5,4},{0,5,2,6}}, 0x1111u,0x4040u,0x5555u,0x2949u,0x105u},
+    {90,130, {{2,5,4,0},{1,5,3,4}}, 0x101u,0x1010u,0x4545u,0x1111u,0x4145u},
+    {75,110, {{0,3,4,0},{0,0,4,3}}, 0x1111u,0x1010u,0x4545u,0x1111u,0x1111u},
+    {100,150, {{0,3,4,0},{0,5,4,3}}, 0x505u,0x1010u,0x5555u,0x5555u,0x1111u},
+    {96,124, {{0,5,4,3},{0,3,5,4}}, 0x1105u,0x1010u,0x5555u,0x1111u,0x4444u},
+    {85,118, {{0,5,3,6},{0,3,5,4}}, 0x1105u,0x1010u,0x5555u,0x5555u,0x101u},
+    {60,76, {{0,5,4,3},{1,5,3,4}}, 0x1u,0x0u,0x101u,0x101u,0x1u},
+    {76,94, {{0,3,5,4},{2,5,3,4}}, 0x105u,0x1010u,0x4444u,0x105u,0x101u},
+    {94,116, {{0,3,4,0},{0,5,4,3}}, 0x525u,0x1010u,0x5555u,0x2929u,0x4445u},
+    {100,132, {{2,5,4,0},{1,5,3,4}}, 0x105u,0x4044u,0x5555u,0x105u,0x2449u}
 };
+static const char *const style_names[LW_STYLE_COUNT] = {"SYNTH","FUNK","BALLAD","HOUSE","90s HIP HOP","90s R&B","00s HIP HOP","00s R&B","80s HIP HOP","BOOM BAP","TRAP","DRILL","NEO SOUL","LOFI","SOUL","GOSPEL","DISCO","DEEP HOUSE","TECH HOUSE","TECHNO","TRANCE","DRUM & BASS","DUBSTEP","REGGAE","REGGAETON","AFROBEATS","AMAPIANO","JAZZ","BLUES","ROCK","POP","SYNTHWAVE","AMBIENT","CHILLOUT","LATIN POP","BOSSA NOVA"};
+static const uint8_t major[LW_STYLE_COUNT] = {0,0,1,0,0,1,0,0,0,0,0,0,1,0,1,1,1,0,0,0,0,0,0,1,0,1,0,1,1,1,1,0,1,0,1,1};
+int liquid_song_major(uint8_t style){return major[style % LW_STYLE_COUNT];}
+const char *liquid_song_style_name(uint8_t style){return style_names[style % LW_STYLE_COUNT];}
+_Static_assert(sizeof(styles)/sizeof(styles[0])==LW_STYLE_COUNT,"style table size");
 static const uint8_t arrangements[][LW_ARRANGEMENT] = {
     {0,1,2,1,2,3,2,4}, {0,1,1,2,3,2,2,4}, {0,2,1,2,1,3,2,4}, {0,1,2,3,1,2,3,4}
 };
@@ -57,7 +94,7 @@ uint8_t liquid_song_generate(uint8_t style, uint32_t state,
     static const uint8_t bass[] = {0,0,0,2,4,7};
     static const uint8_t chords[] = {0,0,2,4};
     static const uint8_t extra[] = {0,2,4,7,9};
-    const Style *rules = &styles[style % 4];
+    const Style *rules = &styles[style % LW_STYLE_COUNT];
     uint8_t bpm = rules->low + pick(&state, rules->high - rules->low + 1);
     harmony->root = roots[pick(&state, 6)];
     const uint8_t *home = rules->chords[pick(&state, 2)];
@@ -99,7 +136,7 @@ uint8_t liquid_song_generate(uint8_t style, uint32_t state,
 }
 
 void liquid_song_legacy_harmony(uint8_t style, LiquidHarmony *harmony) {
-    const uint8_t *chords = styles[style % 4].chords[0];
+    const uint8_t *chords = styles[style % LW_STYLE_COUNT].chords[0];
     harmony->root = 0;
     for (unsigned s = 0; s < LW_SECTIONS; ++s)
         for (unsigned bar = 0; bar < 4; ++bar)

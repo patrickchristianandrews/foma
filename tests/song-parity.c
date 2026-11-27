@@ -48,6 +48,18 @@ int main(void) {
             return 1;
         }
     }
-    puts("All 16 browser-generator parity vectors passed.");
+    uint32_t fingerprints[LW_STYLE_COUNT];
+    for(unsigned style=0;style<LW_STYLE_COUNT;style++){
+        uint8_t pattern[LW_SECTIONS][LW_TRACKS][LW_STEPS];
+        LiquidHarmony h;
+        uint8_t bpm=liquid_song_generate((uint8_t)style,123456u,pattern,&h);
+        if(bpm<60||bpm>180||!liquid_song_style_name((uint8_t)style)[0])return 1;
+        uint32_t hash=hash_bytes(2166136261u,&bpm,1);
+        hash=hash_bytes(hash,(const uint8_t*)pattern,sizeof(pattern));
+        for(unsigned prior=0;prior<style;prior++)if(hash==fingerprints[prior])return 1;
+        fingerprints[style]=hash;
+        for(unsigned i=0;i<LW_SECTIONS;i++)for(unsigned j=0;j<4;j++)if(h.progression[i][j]>6)return 1;
+    }
+    puts("All 16 original parity vectors and 36 distinct genre presets passed.");
     return 0;
 }

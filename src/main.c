@@ -84,7 +84,7 @@ static int wrap(int value,int count){return (value%count+count)%count;}
 
 static const char *names[8]={"BEAR","CAT","BUNNY","CHICK","CLOUD","ALIEN","GHOST","TIDBIT"};
 static const char *sections[5]={"INTRO","VERSE","CHORUS","BRIDGE","OUTRO"};
-static const char *styles[4]={"SYNTH","FUNK","BALLAD","HOUSE"};
+
 static const uint8_t scale[2][7]={{0,2,4,5,7,9,11},{0,2,3,5,7,8,10}};
 static const uint16_t colors[8]={RGB(255,100,40),RGB(190,90,255),RGB(255,210,60),RGB(70,220,250),RGB(255,120,210),RGB(90,255,170),RGB(250,150,80),RGB(160,180,255)};
 static const uint8_t vb[8]={0,0,1,4,5,8,9,10};
@@ -121,7 +121,7 @@ typedef struct {int x,y,vx,vy,ox,oy;uint8_t expr; } Face;
 static Face f[8];
 static uint32_t rnd(uint32_t n){return n?random32()%n:0;}
 static void enqueue(Event e){uint8_t h=(head+1)&63;if(h==tail)return;queue[head]=e;head=h;}
-static int degree(int d,int style){return scale[style==2?0:1][d%7]+12*(d/7);}
+static int degree(int d,int style){return scale[liquid_song_major((uint8_t)style)?0:1][d%7]+12*(d/7);}
 static void sound_at_root(int ch,int d,int root,int part,int style,int gain){
  const SectionSound *fx=&sectionMix[part][ch];
  int volume=clamp(level[ch]+fx->level,0,100)*gain/100;
@@ -530,7 +530,7 @@ static void stage_plane(uint32_t now){
 }
 static void boot_wave(uint32_t elapsed) {
  static int previous=-1;
- if (previous<0) text(32,72,"LIQUID WAVE",WHITE,FONT_BIG);
+ if (previous<0) text(32,72,"LIQUID WAVE",RGB(190,120,255),FONT_BIG);
  int front=(int)(elapsed*300u/780u);
  if(front==previous)return;
  for(int x=0;x<SCREEN_W;x+=3){
@@ -701,9 +701,9 @@ static void song_details_hud(void){
  uint16_t accent=RGB(183,137,235),ink=RGB(103,212,250);
  rect(0,0,240,240,BLACK);
  text(8,3,"3 / SONG LAB",accent,FONT_SMALL);battery_hud();
- text(8,22,styles[p.style],WHITE,FONT_SMALL);
- format_int(value,p.bpm);text(80,22,value,WHITE,FONT_SMALL);text(112,22,"BPM",WHITE,FONT_SMALL);
- text(160,22,keys[wrap(songHarmony.root,12)],ink,FONT_SMALL);
+ text(8,22,liquid_song_style_name(p.style),WHITE,FONT_SMALL);
+ format_int(value,p.bpm);text(112,22,value,WHITE,FONT_SMALL);text(144,22,"BPM",WHITE,FONT_SMALL);
+ text(184,22,keys[wrap(songHarmony.root,12)],ink,FONT_SMALL);
  text(8,40,"K1 TEMPO  K2 KEY",accent,FONT_SMALL);
  text(8,58,"K3",accent,FONT_SMALL);text(34,58,densityNames[songDensity],WHITE,FONT_SMALL);
  text(8,76,"K4",accent,FONT_SMALL);text(34,76,songScopes[songScope],WHITE,FONT_SMALL);
@@ -764,8 +764,8 @@ static void hud(void){
   if(page==SEQ)for(int i=0;i<NC;i++)portrait_at(i,3+30*i,151);
  }
 
- rect(0,0,240,48,BLACK);text(0,0,"LIQUID WAVE",WHITE,FONT_SMALL);text(125,0,pageName[page],WHITE,FONT_SMALL);battery_hud();
- text(0,16,styles[p.style],WHITE,FONT_SMALL);char b[12];format_int(b,p.bpm);text(96,16,b,WHITE,FONT_SMALL);
+ rect(0,0,240,48,BLACK);text(0,0,"LIQUID WAVE",RGB(190,120,255),FONT_SMALL);text(125,0,pageName[page],WHITE,FONT_SMALL);battery_hud();
+ text(0,16,liquid_song_style_name(p.style),WHITE,FONT_SMALL);char b[12];format_int(b,p.bpm);text(112,16,b,WHITE,FONT_SMALL);
  const char *guide=page==SECTION_SOUND?"K1 SECTION / K2 PARAM":
   page==FX?"K2 PARAM / K3 VALUE":page==ENV?"K2 ATTACK / K4 TAIL":page==MOTION?"K2 RATE / K3 DEPTH":(page==EDIT||page==HOME||page==MIX)?"SELECT / ALGO SOUND":!p.sel&&page!=GLOBAL&&page!=SEQ?"TEMPO  LEVEL DRIVE TAIL":knobGuide[page];
  text(0,32,guide,WHITE,FONT_SMALL);
@@ -775,7 +775,7 @@ static void hud(void){
 }
 static int load_song_settings(const SavedSong *saved,uint32_t magic){
  const Project *project=&saved->session.project;
- if(project->magic!=magic||project->style>=4||project->sel>=NC||project->bpm<60||project->bpm>180)return 0;
+ if(project->magic!=magic||project->style>=LW_STYLE_COUNT||project->sel>=NC||project->bpm<60||project->bpm>180)return 0;
  if(saved->harmony.root< -6||saved->harmony.root>5)return 0;
  for(int s=0;s<NS;s++)for(int i=0;i<4;i++)if(saved->harmony.progression[s][i]>=7)return 0;
  for(int i=0;i<LW_ARRANGEMENT;i++)if(saved->harmony.arrangement[i]>=NS)return 0;
@@ -796,11 +796,11 @@ void setup(void){
   }
  }else if(settings_load(&full,sizeof(full))==0&&load_song_settings(&full,SONG_MAGIC)){
   /* Earlier builds did not have per-section sound offsets. */
- }else if(settings_load(&saved,sizeof(saved))==0&&saved.project.magic==LEGACY_MAGIC&&saved.project.style<4&&saved.project.sel<8&&saved.project.bpm>=60&&saved.project.bpm<=180){
+ }else if(settings_load(&saved,sizeof(saved))==0&&saved.project.magic==LEGACY_MAGIC&&saved.project.style<LW_STYLE_COUNT&&saved.project.sel<8&&saved.project.bpm>=60&&saved.project.bpm<=180){
   p=saved.project;for(int ch=0;ch<NC;ch++)chooseInstrument(ch,saved.presets[ch]);
   liquid_song_legacy_harmony(p.style,&songHarmony);
  }else{
-  Project legacy;if(settings_load(&legacy,sizeof(legacy))==0&&legacy.magic==LEGACY_MAGIC&&legacy.style<4&&legacy.sel<8&&legacy.bpm>=60&&legacy.bpm<=180){
+  Project legacy;if(settings_load(&legacy,sizeof(legacy))==0&&legacy.magic==LEGACY_MAGIC&&legacy.style<LW_STYLE_COUNT&&legacy.sel<8&&legacy.bpm>=60&&legacy.bpm<=180){
    p=legacy;
    liquid_song_legacy_harmony(p.style,&songHarmony);
   }
@@ -940,7 +940,7 @@ void loop(void){
   settings_save(&saved,sizeof(saved));
  }
  int d=encoder(ENC_SELECT);if(d){p.sel=(uint8_t)wrap(p.sel+d,8);if(page==HOME)page=MIX;}
- d=encoder(ENC_PRESETS);if(d){p.style=(uint8_t)wrap(p.style+d,4);if(page==SONG_DETAILS)scoped_generate();else generate();pos=0;due=now;remMs=0;}
+ d=encoder(ENC_PRESETS);if(d){p.style=(uint8_t)wrap(p.style+d,LW_STYLE_COUNT);if(page==SONG_DETAILS)scoped_generate();else generate();pos=0;due=now;remMs=0;}
  int ch=p.sel;
  d=encoder(ENC_ALGORITHM);if(d){
   if(page==EDIT||page==HOME||page==MIX||page==SONG_DETAILS){chooseInstrument(ch,preset[ch]+d);if(page==HOME)page=MIX;if(!playing)sound(ch,ch?0:7);}
