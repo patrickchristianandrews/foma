@@ -1,6 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /* Uses the pinned upstream FM1 Radio decoder, not a simulated audio stream. */
 #include "app.h"
+#include "../src/weather.h"
+extern int liquid_weather_room_active(void);
 #include "../platform/fm1.h"
 #include <string.h>
 #define wifi_st plat_wifi_state()
@@ -82,7 +84,59 @@ static void station_url(const char *id,const char *name){
  while(*suffix)url[n++]=*suffix++;url[n]=0;
  w_cpy(title,name,sizeof title);radio_url=url;requested=1;
 }
-int lw_radio_can_power_off(void){return !radio_net_running()&&rgn_state!=1;}
+/* Main-loop owned scheduling, worker publishes a single completed reading.
+ * Never start a second TLS session while radio search or streaming is active. */
+static volatile int weather_job;
+static int weather_place=-2;
+static uint32_t weather_next;
+static LiquidWeather weather_result;
+static char weather_error[32];
+#ifndef PLAT_HOST
+extern int lw_net_json(char *,unsigned,char *,unsigned,char *);
+static void weather_worker(void *arg){
+ (void)arg;
+ char urlbuf[200]="https://api.open-meteo.com";
+ unsigned prefix=(unsigned)strlen(urlbuf);
+ char *json=malloc(2048);
+ int ok=0;
+ if(json&&liquid_weather_request((unsigned)weather_place,urlbuf+prefix,sizeof urlbuf-prefix)){
+  int n=lw_net_json(urlbuf,sizeof urlbuf,json,2048,weather_error);
+  if(n>0)ok=liquid_weather_parse(json,(unsigned)n,&weather_result);
+ }
+ free(json);
+ RING_PUBLISH();
+ weather_job=ok?2:3;
+}
+#endif
+const char *lw_weather_status(void){
+ if(plat_wifi_state()!=WIFI_CONNECTED)return "OFFLINE";
+ if(weather_job==1)return "FETCH";
+ if(weather_job==3)return "RETRY";
+ return "WAIT";
+}
+void lw_weather_service(void){
+ uint32_t now=plat_ms();
+ if(weather_job==2||weather_job==3){
+  int ok=weather_job==2;
+  RING_PUBLISH();
+  if(ok)liquid_weather_accept((unsigned)weather_place,&weather_result);
+  weather_next=now+(ok?600000u:30000u);
+  weather_job=0;
+ }
+ if(weather_job||!liquid_weather_room_active()||plat_wifi_state()!=WIFI_CONNECTED||active||radio_net_running()||rgn_state==1)return;
+ int dest=liquid_weather_destination();
+ if(dest<0)return;
+ if(dest!=weather_place)weather_next=now;
+ if((int32_t)(now-weather_next)<0)return;
+ weather_place=dest;
+ #ifndef PLAT_HOST
+ weather_job=1;
+ if(plat_net_task(weather_worker,0,"lwweather")){weather_job=0;weather_next=now+30000u;}
+ #else
+ weather_next=now+30000u;
+ #endif
+}
+int lw_radio_can_power_off(void){return !radio_net_running()&&rgn_state!=1&&weather_job!=1;}
 static void release_buffers(void){
  if(radio_net_running()||!net_buf)return;
  uint32_t flags=plat_lock();
@@ -103,11 +157,11 @@ void lw_radio_service(void){
   else if(!lookup){station_valid=0;notice=rgn_state==3?rgn_why:"NO STATIONS - PLAY DIRECT";}
  }
  if(search_started&&plat_ms()-search_since>35000u)notice="SEARCH SLOW - WAIT / RETRY";
- if(lookup&&(int32_t)(plat_ms()-lookup_due)>=0&&!radio_net_running()&&rgn_state!=1){
+ if(lookup&&weather_job!=1&&(int32_t)(plat_ms()-lookup_due)>=0&&!radio_net_running()&&rgn_state!=1){
   lookup=0;station_valid=0;search_city=city;
   if(rgn_start(cities[city].city,cities[city].country)!=0){notice="SEARCH FAILED - PLAY DIRECT";}else {notice="";search_started=1;search_since=plat_ms();}
  }
- if(requested&&!lookup&&rgn_state!=1&&!radio_net_running()){
+ if(requested&&weather_job!=1&&!lookup&&rgn_state!=1&&!radio_net_running()){
   requested=0;radio_frac=0;radio_play(0);mix_on=radio_st!=RS_ERROR;
  }
  #ifdef PLAT_HOST
@@ -132,7 +186,7 @@ int lw_radio_ui(void){
   else if(lookup||rgn_state==1){notice="SEARCHING - EDIT TO RETRY";}
   else {radio_url=fallback;w_cpy(title,"Groove Salad",sizeof title);requested=1;notice="";}
  }
- if(button_pressed(BTN_GLO)&&rgn_state!=1){mix_on=0;radio_stop();lookup=0;browsing=0;radio_url=fallback;w_cpy(title,"Groove Salad",sizeof title);requested=1;notice="";}
+ if(button_pressed(BTN_GLO)&&rgn_state!=1&&weather_job!=1){mix_on=0;radio_stop();lookup=0;browsing=0;radio_url=fallback;w_cpy(title,"Groove Salad",sizeof title);requested=1;notice="";}
  if(button_pressed(BTN_SAVE)&&radio_st==RS_OFF)fav_save();
  if(button_pressed(BTN_SEQ)&&fav_id[0]){mix_on=0;radio_stop();station_url(fav_id,fav_title);}
  static uint32_t last_draw;
@@ -167,11 +221,10 @@ void lw_radio_mix(int32_t *lr,uint32_t n,uint32_t gain){
    int32_t sample=(int32_t)a[ch]+((int32_t)(b[ch]-a[ch])*(int32_t)(radio_frac>>1)>>15);
    /* +6 dB radio makeup, soft knee before the independent volume control. */
    int32_t a=sample<0?-sample:sample;
-   a*=2;
-   if(a>22000)a=22000+(a-22000)/5;
-   if(a>32000)a=32000;
+   if(a>24000)a=24000+(a-24000)/4;
+   if(a>28000)a=28000;
    sample=sample<0?-a:a;
-   int32_t s=lr[i*2u+ch]+(sample*g/100*(int32_t)gain/4096)*256;
+   int32_t s=lr[i*2u+ch]/2+(sample*g/100*(int32_t)gain/4096)*128;
    lr[i*2u+ch]=s>8388607?8388607:s<-8388608?-8388608:s;
   }
   radio_frac+=step;uint32_t adv=radio_frac>>16;radio_frac&=65535u;r+=adv<w-r?adv:w-r;
