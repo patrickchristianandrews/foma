@@ -1,5 +1,8 @@
 name: Publish compiled experimental Wi-Fi installer
 on:
+  push:
+    branches: [liquid-wave-fm1-development]
+    paths: ['.github/workflows/publish-wifi-installer.yml']
   workflow_dispatch:
 permissions:
   contents: write
@@ -13,8 +16,11 @@ jobs:
       - uses: actions/checkout@v4
       - name: Retrieve exact successful Wi-Fi build
         run: |
-          gh run download 45926545716 --repo "$GITHUB_REPOSITORY" --name liquid-wave-wifi-experimental --dir /tmp/wifi-package
-          printf '%s  %s\n' '84795d4baa30fad32d7f3491b8697da87b5023330d55bfaa796df50b696312ca' /tmp/wifi-package/liquid-wave-wifi.fwsc | sha256sum --check
+          test "$(gh run view 45934916130 --repo "$GITHUB_REPOSITORY" --json conclusion,headSha --jq '.conclusion + ":" + .headSha')" = "success:a7e68953c7455d844b833c8a4808c6c50036840f"
+          curl -fsSL -H "Authorization: Bearer $GH_TOKEN" "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/artifacts/15170317929/zip" -o /tmp/wifi-artifact.zip
+          printf '%s  %s\n' 'f3c633fa48dd66d7b64345f706c17a99fde5df5f14e0ac031623be4e350e22f0' /tmp/wifi-artifact.zip | sha256sum --check
+          unzip -q /tmp/wifi-artifact.zip -d /tmp/wifi-package
+          test "$(stat -c%s /tmp/wifi-package/liquid-wave-wifi.fwsc)" = 611496
           git clone https://github.com/charlesvestal/fm1-base.git /tmp/fm1-base
           git -C /tmp/fm1-base checkout 6d6ae6d874fb34e2bec3fc6043fa7d859b206462
       - name: Assemble upstream USB installer with exact Wi-Fi package
@@ -35,7 +41,7 @@ jobs:
           lib='\n'.join(strip((base/'web'/name).read_text()) for name in ('fm1pkg.js','fm1ota.js'))
           html=(base/'web/installer.html').read_text()
           digest=hashlib.sha256(raw).hexdigest()
-          meta={'version':'Experimental Wi-Fi + Radio','product':product,'pkg':'firmware.fwsc','sha256':digest,'backup':False,'boot':None}
+          meta={'version':'Experimental Wi-Fi + Radio — password fix','product':product,'pkg':'firmware.fwsc','sha256':digest,'backup':False,'boot':None}
           package_check='if (productOf(pkg) !== meta.product) { sayK("badpkg"); return; }'
           assert html.count(package_check)==1
           html=html.replace(package_check,'''const hash = await crypto.subtle.digest("SHA-256", pkg);
@@ -46,18 +52,18 @@ jobs:
           for key,value in {'NAME':'Advanced Liquid Wave Wi-Fi + Radio','REPO':'https://github.com/patrickchristianandrews/foma','REPO_SHORT':'github.com/patrickchristianandrews/foma','LICENSE':'GPL-3.0 / MPL-2.0 components','CREDITS':' Native Wi-Fi and radio integration, based on FM1 Radio by Charles Vestal.'}.items():
               html=html.replace('{{'+key+'}}',value)
           assert not re.search(r'\{\{[A-Z_]+\}\}',html)
-          html=re.sub(r'(<body[^>]*>)',r'\1<p style="margin:12px;padding:12px;border:2px solid #b77836"><strong>Experimental Wi-Fi firmware:</strong> compiled successfully; real hardware and radio playback not yet tested. Back up your FM-1 first. This edition excludes Bluetooth, AAC and Frodhes. <a href="/liquid-wave/">Back to Liquid Wave</a></p>',html,count=1)
+          html=re.sub(r'(<body[^>]*>)',r'\1<p style="margin:12px;padding:12px;border:2px solid #b77836"><strong>Experimental Wi-Fi firmware:</strong> compiled successfully; real hardware and radio playback not yet tested. Back up your FM-1 first. Password entry: K1 selects lowercase, uppercase, numbers or symbols; SELECT chooses the character; SEL adds it. This edition excludes Bluetooth, AAC and Frodhes. <a href="/liquid-wave/">Back to Liquid Wave</a></p>',html,count=1)
           (out/'index.html').write_text(html)
-          (out/'release.json').write_text(json.dumps({'revision':'28a4ab3b510168f47e5b496be9ea0426d9b8582c','product':product,'firmware_sha256':digest,'hardware_tested':False},indent=2))
+          (out/'release.json').write_text(json.dumps({'revision':'a7e68953c7455d844b833c8a4808c6c50036840f','product':product,'firmware_sha256':digest,'hardware_tested':False},indent=2))
           with zipfile.ZipFile('/tmp/Advanced-Liquid-Wave-WiFi-installer.zip','w',zipfile.ZIP_DEFLATED) as z:
               for file in sorted(out.iterdir()):
                   z.write(file,file.name)
           PY
       - name: Publish separately from standard firmware
         run: |
-          tag=advanced-liquid-wave-wifi-experimental
+          tag=advanced-liquid-wave-wifi-password-fix
           if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release upload "$tag" /tmp/Advanced-Liquid-Wave-WiFi-installer.zip /tmp/wifi-package/liquid-wave-wifi.fwsc --clobber
           else
-            gh release create "$tag" /tmp/Advanced-Liquid-Wave-WiFi-installer.zip /tmp/wifi-package/liquid-wave-wifi.fwsc --target 28a4ab3b510168f47e5b496be9ea0426d9b8582c --prerelease --title "Advanced Liquid Wave Wi-Fi + Radio (experimental)" --notes "Exact successful hardware build 45926545716. Native Wi-Fi and MP3 radio; Bluetooth, Frodhes and AAC excluded. Physical hardware unverified. Separate edition; standard firmware unchanged."
+            gh release create "$tag" /tmp/Advanced-Liquid-Wave-WiFi-installer.zip /tmp/wifi-package/liquid-wave-wifi.fwsc --target a7e68953c7455d844b833c8a4808c6c50036840f --prerelease --title "Advanced Liquid Wave Wi-Fi + Radio (experimental)" --notes "Exact successful hardware build 45934916130. Password picker corrected: K1 changes character group, SELECT chooses character, SEL adds it. Native Wi-Fi and MP3 radio; Bluetooth, Frodhes and AAC excluded. Physical hardware unverified. Separate edition; standard firmware unchanged."
           fi
