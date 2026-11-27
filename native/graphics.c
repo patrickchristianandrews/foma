@@ -14,7 +14,7 @@ typedef struct {
  const uint16_t *off;
  const uint8_t *data;
 } felucca_font_t;
-#include "../platform/gen/felucca_font.h"
+#include "font_packed.h"
 static void fmt_int(char *d,int32_t value) {
  char t[12]; unsigned n=0;
  uint32_t u=value<0?0u-(uint32_t)value:(uint32_t)value;
@@ -111,7 +111,7 @@ void line(int x0, int y0, int x1, int y1, uint16_t color) {
   }
 }
 
-/* ---- text: the fonts are 4-bit alpha, blended onto what is already there */
+/* ---- text: losslessly packed original binary-alpha glyphs */
 static const felucca_font_t *font_of(int font) { return font == FONT_BIG ? &FONT_L : &FONT_S; }
 
 static uint32_t font_glyph(const felucca_font_t *f, uint32_t ch) {
@@ -134,7 +134,7 @@ static uint16_t blend(uint16_t bg, uint16_t fg, uint32_t a) { /* a: 0..15 */
 int text(int x, int y, const char *s, uint16_t color, int font) {
   const felucca_font_t *f = font_of(font);
   for (; *s; s++) {
-    uint32_t gi = font_glyph(f, (uint8_t)*s), w = f->bw[gi], bpr = (w + 1u) / 2u, gx, gy;
+    uint32_t gi = font_glyph(f, (uint8_t)*s), w = f->bw[gi], gx, gy;
     const uint8_t *gd = f->data + f->off[gi];
     for (gy = 0; gy < f->h; gy++) {
       int py = y + (int)gy;
@@ -143,8 +143,8 @@ int text(int x, int y, const char *s, uint16_t color, int font) {
       }
       for (gx = 0; gx < w; gx++) {
         int px = x - f->pad + (int)gx;
-        uint32_t v = gd[gy * bpr + gx / 2u];
-        v = (gx & 1u) ? (v & 15u) : (v >> 4);
+        uint32_t bit = gy*w+gx;
+        uint32_t v = (gd[bit>>3] & (0x80u>>(bit&7u))) ? 15u : 0u;
         if (fb && v && (unsigned)px < SCREEN_W) {
           uint8_t *p = &fb[py * SCREEN_W + px];
           *p = pack565(v == 15u ? color : blend(unpack565(*p), color, v));
