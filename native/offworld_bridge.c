@@ -299,7 +299,12 @@ static void alien_draw(uint32_t now){
   rect(6,48,140,13,BLACK);text(9,48,tag,ink,FONT_SMALL);}
  if(logs_on&&since>=3000u&&since<6500u){
   static const char *const log[NWORLD]={"CITY SIGNAL LOCKED","LIFEFORM DETECTED","ORBITAL LINK ONLINE","CRYSTAL RESONANCE","THERMAL ANOMALY","SIGNAL ACQUIRED","PORTAL ACTIVITY","ICE FIELD AHEAD"};
-  rect(6,48,165,13,BLACK);text(9,48,log[scene],ink,FONT_SMALL);
+  char msg[24];unsigned n=(since-3000u)/65u,k=0;while(k<n&&k<sizeof(msg)-1&&log[scene][k]){msg[k]=log[scene][k];k++;}msg[k]=0;
+  rect(6,48,165,13,BLACK);text(9,48,msg,ink,FONT_SMALL);
+ }
+ if(story_on){int mn=film_minutes(now),h=(19+mn/60)%24;char clock[6];
+  clock[0]='0'+h/10;clock[1]='0'+h%10;clock[2]=':';clock[3]='0'+mn%60/10;clock[4]='0'+mn%10;clock[5]=0;
+  rect(184,48,50,13,BLACK);text(186,48,clock,ink,FONT_SMALL);
  }
  frame(3,45,234,93,ink);
 }
