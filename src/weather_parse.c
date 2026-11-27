@@ -44,6 +44,15 @@ int liquid_weather_parse(const char *json,unsigned len,LiquidWeather *out){
  *out=v;return 1;
 }
 
+/* Convert server UTC seconds of day using the forecast destination's
+ * current UTC offset, including fractional-hour zones and midnight wrap. */
+int liquid_weather_clock(const char *json,unsigned len,int utc){
+ if(!json||len>8192||utc<0||utc>=86400)return -1;
+ int offset10;
+ if(!number10(field(json,json+len,"utc_offset_seconds"),json+len,&offset10))return -1;
+ if(offset10%10||offset10 < -432000 || offset10 > 504000)return -1;
+ return (utc+offset10/10+86400)%86400;
+}
 static int append(char **p,unsigned *left,const char *s){
  while(*s){if(*left<=1)return 0;*(*p)++=*s++;--*left;}return 1;
 }
