@@ -13,8 +13,8 @@ jobs:
     timeout-minutes: 20
     env:
       GH_TOKEN: ${{ github.token }}
-      CANDIDATE_RUN: '46067712183'
-      CANDIDATE_SHA: 'b3811569d9caf4a6109b1fe0fde2b420ef4be307'
+      CANDIDATE_RUN: '46069793727'
+      CANDIDATE_SHA: '7b4dac145ca913f57b920bdb7951b1d9fa1966de'
     steps:
       - name: Require exact audited candidate and all checks
         run: |
@@ -56,7 +56,7 @@ jobs:
               print('Verified candidate:',sha)
           PY
           # Never replace the previously published Wi-Fi or standard assets.
-          mv Advanced-Liquid-Wave-Neon-Tides-test-installer.zip Advanced-Liquid-Wave-Neon-Tides-b381156-test-installer.zip
-          mv liquid-wave-neon-tides-test.fwsc liquid-wave-neon-tides-b381156-test.fwsc
-          mv neon-tides-test-release.json neon-tides-b381156-test-release.json
-          gh release upload advanced-liquid-wave-wifi-experimental Advanced-Liquid-Wave-Neon-Tides-b381156-test-installer.zip liquid-wave-neon-tides-b381156-test.fwsc neon-tides-b381156-test-release.json --repo "$GITHUB_REPOSITORY"
+          mv Advanced-Liquid-Wave-Neon-Tides-test-installer.zip Advanced-Liquid-Wave-Neon-Tides-7b4dac1-test-installer.zip
+          mv liquid-wave-neon-tides-test.fwsc liquid-wave-neon-tides-7b4dac1-test.fwsc
+          mv neon-tides-test-release.json neon-tides-7b4dac1-test-release.json
+          gh release upload advanced-liquid-wave-wifi-experimental Advanced-Liquid-Wave-Neon-Tides-7b4dac1-test-installer.zip liquid-wave-neon-tides-7b4dac1-test.fwsc neon-tides-7b4dac1-test-release.json --repo "$GITHUB_REPOSITORY"
