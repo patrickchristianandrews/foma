@@ -1291,54 +1291,17 @@ static void lb_hud(void){
 static volatile unsigned ocean_peak;
 void lw_ocean_peak(unsigned peak){ocean_peak=peak;}
 static int ocean_palette,ocean_speed=3,ocean_swell=12,ocean_characters=1;
-static void ocean_hud(uint32_t now){
- static const uint16_t palettes[3][4]={
- {RGB(8,31,62),RGB(10,76,111),RGB(15,155,190),RGB(138,244,246)},
- {RGB(30,19,67),RGB(83,36,126),RGB(179,77,193),RGB(255,174,218)},
- {RGB(13,40,51),RGB(12,94,85),RGB(54,170,124),RGB(204,250,160)}};
- const uint16_t *c=palettes[ocean_palette];
- int pulse=clamp((int)(ocean_peak>>18),0,30);
- uint32_t phase=now*(unsigned)(ocean_speed+1)*170000u;
- rect(0,0,240,240,c[0]);
- /* Horizon, reflected moonlight and three independently rolling surf layers. */
- for(int y=24;y<100;y+=8)rect(0,y,240,8,y<56?c[0]:c[1]);
- mascot_ellipse(180,51,18,18,RGB(255,218,163));
- for(int band=0;band<3;band++){
-  int previous=0;
-  for(int x=0;x<240;x+=3){
-   int amp=ocean_swell+band*4+pulse/2;
-   int y=93+band*38+(sine((uint32_t)x*(19000000u+band*6000000u)-phase*(band+1))*amp>>15);
-   y=clamp(y,67,208);
-   rect(x,y,3,216-y,c[band]);
-   if(x)line(x-3,previous,x,y,c[band+1]);
-   if((x/3+now/90u+band*3)%11==0)rect(x,y-2,2,2,WHITE);
-   previous=y;
-  }
- }
- if(ocean_characters)for(int i=0;i<NC;i++){
-  int x=7+(i%4)*57,y=83+(i/4)*28+((sine(phase+(uint32_t)i*536870912u)*5)>>15);
-  portrait_large=1;portrait_at(i,x,y);portrait_large=0;
- }
- text(5,3,"7 / OCEAN VISUALIZER",WHITE,FONT_SMALL);battery_hud();
- rect(0,216,240,24,BLACK);
- text(5,220,"PLAY / K1 SPEED / K2 SWELL",WHITE,FONT_SMALL);
+extern void lw_offworld_enter(void),lw_offworld_leave(void),lw_offworld_input(void),lw_offworld_draw(void);
+extern void free(void *);
+void lw_offworld_echo_suspend(void){free(echoL);free(echoR);echoL=echoR=0;}
+void lw_offworld_echo_resume(void){
+ echoL=malloc(4096u*sizeof *echoL);echoR=malloc(4096u*sizeof *echoR);
+ if(!echoL||!echoR){free(echoL);free(echoR);echoL=echoR=0;return;}
+ for(unsigned i=0;i<4096u;i++)echoL[i]=echoR[i]=0;
+ echoPos=0;
 }
-static void ocean_input(uint32_t now){
- int d=encoder(ENC_KNOB1);if(d)ocean_speed=clamp(ocean_speed+d,0,7);
- d=encoder(ENC_KNOB2);if(d)ocean_swell=clamp(ocean_swell+d,3,24);
- if(button_pressed(BTN_SEL))ocean_palette=wrap(ocean_palette+1,3);
- if(button_pressed(BTN_EDIT))ocean_characters=!ocean_characters;
- if(button_pressed(BTN_PLAY)){
-  if(playing||lb_playing){playing=0;lb_stop();}
-  else {playing=1;pos=0;due=now;remMs=0;}
- }
- if(lb_playing)lb_service(now);
- int budget=0;while(playing&&(int32_t)(now-due)>=0&&budget++<4){
-  transport();due+=15000/p.bpm;remMs+=15000%p.bpm;
-  if(remMs>=p.bpm){due++;remMs-=p.bpm;}
- }
- for(int k=0;k<KEY_COUNT;k++)if(key_pressed(k))sound(p.sel,p.sel?k%13:1<<(k%4));
-}
+static void ocean_hud(uint32_t now){(void)now;lw_offworld_draw();}
+static void ocean_input(uint32_t now){(void)now;lw_offworld_input();}
 #ifdef PLAT_HOST
 #include <string.h>
 int lw_loop_expect(const char *name,int *v){
@@ -1599,8 +1562,8 @@ void loop(void){
  if(playing){playing=0;releaseRequested=1;}page=CATALOG;catalog_hud();lastHud=now;panel_lights(now);return;}
 #if defined(FOMA_NATIVE_WIFI) && FOMA_NATIVE_WIFI
   if(page==CATALOG){catalog_stop();if(playing){playing=0;releaseRequested=1;}lb_init();page=LOOP_BUILDER;lb_hud();lastHud=now;panel_lights(now);return;}
-  if(page==LOOP_BUILDER){page=OCEAN_VIS;ocean_hud(now);lastHud=now;panel_lights(now);return;}
-  if(page==OCEAN_VIS){lb_stop();playing=0;releaseRequested=1;}
+  if(page==LOOP_BUILDER){lb_stop();playing=0;releaseRequested=1;page=OCEAN_VIS;lw_offworld_enter();ocean_hud(now);lastHud=now;panel_lights(now);return;}
+  if(page==OCEAN_VIS){lw_offworld_leave();lb_stop();playing=0;releaseRequested=1;}
 #endif
   if(page==CATALOG)catalog_stop();
   if(page==HOME&&!skippedBoot){
