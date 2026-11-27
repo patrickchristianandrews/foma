@@ -263,6 +263,39 @@ static void generate(void){
  p.bpm=bpm;
  songHarmony=nextHarmony;
 }
+/* Classic preserves the original web composition. Other modes selectively remix. */
+static int songScope=0,songDensity=2,songPart=0;
+static const char *songScopes[]={"CLASSIC","CUSTOM","SECTION","TRACK","CHORDS","ORDER"};
+static void scoped_generate(void){
+ if(songScope==0){generate();return;}
+ static uint8_t candidate[NS][NC][16];
+ LiquidHarmony h;
+ liquid_song_generate(p.style,random32(),candidate,&h);
+ if(songScope==4){
+  for(int s=0;s<NS;s++)for(int j=0;j<4;j++)songHarmony.progression[s][j]=h.progression[s][j];
+  return;
+ }
+ if(songScope==5){
+  for(int i=6;i>1;i--){int j=1+(int)rnd(i);uint8_t t=songHarmony.arrangement[i];songHarmony.arrangement[i]=songHarmony.arrangement[j];songHarmony.arrangement[j]=t;}
+  return;
+ }
+ for(int s=0;s<NS;s++)for(int ch=0;ch<NC;ch++){
+  if((songScope==2&&s!=songPart)||(songScope==3&&ch!=p.sel))continue;
+  for(int i=0;i<16;i++){
+   uint8_t n=candidate[s][ch][i];
+   if(songDensity<2 && i && rnd(4)<(unsigned)(2-songDensity))n=ch?EMPTY:0;
+   if(songDensity>2 && rnd(8)<(unsigned)(songDensity-2)){
+    if(!ch)n|=4;
+    else if(n==EMPTY)n=(uint8_t)(rnd(4)*2);
+   }
+   p.pat[s][ch][i]=n;
+  }
+ }
+ if(songScope==1){
+  for(int s=0;s<NS;s++)for(int j=0;j<4;j++)songHarmony.progression[s][j]=h.progression[s][j];
+  for(int i=0;i<8;i++)songHarmony.arrangement[i]=h.arrangement[i];
+ }
+}
 static void transport(void){
  section=repeat?loopSection:songHarmony.arrangement[pos/64];bar=(pos/16)%4;step=pos%16;
  int cd=songHarmony.progression[section][bar];
@@ -285,7 +318,7 @@ static void weather_select(int destination){
  weather.back=weather.place;
  weather.place=destination;
  weather.available=0;
- weather.playing=0;
+ if(weather.playing){weather.step=0;weather.nextStep=millis();}
 }
 
 static unsigned offlineScene=0;
@@ -429,6 +462,8 @@ static void weather_hud(uint32_t now){
   text(8,205,moon?"LUNAR MODE":liquid_weather_condition(code),WHITE,FONT_SMALL);
   if(!moon){format_int(value,offlineTemp);text(124,205,value,WHITE,FONT_SMALL);text(150,205,"C",peach,FONT_SMALL);text(170,205,"DEMO",purple,FONT_SMALL);}
  }
+ format_int(value,live?weather.reading.wind10/10:offlineWind);
+ if(!moon){text(8,184,"WIND",peach,FONT_SMALL);text(48,184,value,WHITE,FONT_SMALL);}
  text(8,222,"K1 SKY K2 HR K3 C K4 WIND",peach,FONT_SMALL);
  if(ambientLevel)text(8,35,"AMB",purple,FONT_SMALL);
  if(animalLevel)text(34,35,"CALL",purple,FONT_SMALL);
@@ -662,25 +697,28 @@ static void song_details_hud(void){
  static const char *keys[]={"C","C#","D","D#","E","F","F#","G","G#","A","A#","B"};
  static const char *degrees[]={"I","II","III","IV","V","VI","VII"};
  static const char *shortSection[]={"I","V","C","B","O"};
+ static const char *densityNames[]={"SPARSE","LIGHT","ORIGINAL","RICH","DENSE"};
+ uint16_t accent=RGB(183,137,235),ink=RGB(103,212,250);
  rect(0,0,240,240,BLACK);
- text(8,5,"3 / RANDOM SONG",RGB(183,137,235),FONT_SMALL);
- text(8,24,styles[p.style],WHITE,FONT_SMALL);
- format_int(value,p.bpm);text(94,24,value,WHITE,FONT_SMALL);text(126,24,"BPM",WHITE,FONT_SMALL);
- text(174,24,keys[wrap(songHarmony.root,12)],WHITE,FONT_SMALL);
- text(8,42,p.style==2?"MAJOR / 32 BARS":"MINOR / 32 BARS",WHITE,FONT_SMALL);
- for(int i=0;i<NS;i++){
-  int y=64+i*19;
-  text(8,y,sections[i],WHITE,FONT_SMALL);
-  for(int j=0;j<4;j++)text(98+j*33,y,degrees[songHarmony.progression[i][j]%7],colors[i],FONT_SMALL);
- }
- text(8,161,"ARRANGEMENT (4 BARS EACH)",WHITE,FONT_SMALL);
+ text(8,3,"3 / SONG LAB",accent,FONT_SMALL);battery_hud();
+ text(8,22,styles[p.style],WHITE,FONT_SMALL);
+ format_int(value,p.bpm);text(80,22,value,WHITE,FONT_SMALL);text(112,22,"BPM",WHITE,FONT_SMALL);
+ text(160,22,keys[wrap(songHarmony.root,12)],ink,FONT_SMALL);
+ text(8,40,"K1 TEMPO  K2 KEY",accent,FONT_SMALL);
+ text(8,58,"K3",accent,FONT_SMALL);text(34,58,densityNames[songDensity],WHITE,FONT_SMALL);
+ text(8,76,"K4",accent,FONT_SMALL);text(34,76,songScopes[songScope],WHITE,FONT_SMALL);
+ text(8,94,"OCT",accent,FONT_SMALL);text(65,94,sections[songPart],WHITE,FONT_SMALL);
+ for(int j=0;j<4;j++)text(127+j*27,94,degrees[songHarmony.progression[songPart][j]%7],ink,FONT_SMALL);
+ text(8,112,"SELECT",accent,FONT_SMALL);text(65,112,names[p.sel],colors[p.sel],FONT_SMALL);
+ text(8,130,"ALGO",accent,FONT_SMALL);text(65,130,instrument(p.sel)->name,WHITE,FONT_SMALL);
  for(int i=0;i<8;i++){
   int x=9+i*29;
-  frame(x,180,25,18,playing&&pos/64==i?WHITE:colors[songHarmony.arrangement[i]]);
-  text(x+7,182,shortSection[songHarmony.arrangement[i]],WHITE,FONT_SMALL);
+  frame(x,155,25,18,playing&&pos/64==i?WHITE:colors[songHarmony.arrangement[i]]);
+  text(x+7,157,shortSection[songHarmony.arrangement[i]],WHITE,FONT_SMALL);
  }
- text(8,205,playing?"PLAYING / PLAY STOP":"STOPPED / PLAY START",WHITE,FONT_SMALL);
- text(8,222,"ARP NEW / HOME RADIO",WHITE,FONT_SMALL);battery_hud();
+ text(8,177,"PRESET STYLE / SEL MUTE",accent,FONT_SMALL);
+ text(8,195,playing?"PLAY STOP / SAVE WHEN STOP":"PLAY START / SAVE SONG",WHITE,FONT_SMALL);
+ text(8,222,"ARP REMIX / HOME RADIO",ink,FONT_SMALL);
 }
 static void radio_hud(void){
  rect(0,0,240,240,BLACK);
@@ -729,7 +767,7 @@ static void hud(void){
  rect(0,0,240,48,BLACK);text(0,0,"LIQUID WAVE",WHITE,FONT_SMALL);text(125,0,pageName[page],WHITE,FONT_SMALL);battery_hud();
  text(0,16,styles[p.style],WHITE,FONT_SMALL);char b[12];format_int(b,p.bpm);text(96,16,b,WHITE,FONT_SMALL);
  const char *guide=page==SECTION_SOUND?"K1 SECTION / K2 PARAM":
-  page==FX?"K2 PARAM / K3 VALUE":page==ENV?"K2 ATTACK / K4 TAIL":page==MOTION?"K2 RATE / K3 DEPTH":page==EDIT?"ALGORITHM: INSTRUMENT":!p.sel&&page!=GLOBAL&&page!=SEQ?"TEMPO  LEVEL DRIVE TAIL":knobGuide[page];
+  page==FX?"K2 PARAM / K3 VALUE":page==ENV?"K2 ATTACK / K4 TAIL":page==MOTION?"K2 RATE / K3 DEPTH":(page==EDIT||page==HOME||page==MIX)?"SELECT / ALGO SOUND":!p.sel&&page!=GLOBAL&&page!=SEQ?"TEMPO  LEVEL DRIVE TAIL":knobGuide[page];
  text(0,32,guide,WHITE,FONT_SMALL);
  rect(0,194,240,46,BLACK);text(0,194,sections[section],WHITE,FONT_SMALL);
  text(96,194,names[p.sel],colors[p.sel],FONT_SMALL);text(192,194,recording?"REC":"",WHITE,FONT_SMALL);
@@ -738,7 +776,7 @@ static void hud(void){
 static int load_song_settings(const SavedSong *saved,uint32_t magic){
  const Project *project=&saved->session.project;
  if(project->magic!=magic||project->style>=4||project->sel>=NC||project->bpm<60||project->bpm>180)return 0;
- if(saved->harmony.root< -4||saved->harmony.root>5)return 0;
+ if(saved->harmony.root< -6||saved->harmony.root>5)return 0;
  for(int s=0;s<NS;s++)for(int i=0;i<4;i++)if(saved->harmony.progression[s][i]>=7)return 0;
  for(int i=0;i<LW_ARRANGEMENT;i++)if(saved->harmony.arrangement[i]>=NS)return 0;
  p=*project;
@@ -889,9 +927,9 @@ void loop(void){
  if(button_pressed(BTN_SEQ)){if(page==SEQ)repeat=!repeat;page=SEQ;loopSection=section;}
  if(button_pressed(BTN_PLAY)){playing=!playing;if(playing){pos=0;due=now;remMs=0;}else releaseRequested=1;}
  if(button_pressed(BTN_REC))recording=!recording;
- if(button_pressed(BTN_OCT_DOWN))octave=clamp(octave-1,-2,2);
- if(button_pressed(BTN_OCT_UP))octave=clamp(octave+1,-2,2);
- if(button_pressed(BTN_ARP)){generate();pos=0;due=now;}
+ if(button_pressed(BTN_OCT_DOWN)){if(page==SONG_DETAILS)songPart=wrap(songPart-1,NS);else octave=clamp(octave-1,-2,2);}
+ if(button_pressed(BTN_OCT_UP)){if(page==SONG_DETAILS)songPart=wrap(songPart+1,NS);else octave=clamp(octave+1,-2,2);}
+ if(button_pressed(BTN_ARP)){if(page==SONG_DETAILS)scoped_generate();else generate();pos=0;due=now;remMs=0;}
  if(button_pressed(BTN_SAVE)&&!playing){
   SavedMix saved={0};
   saved.song.session.project=p;
@@ -902,20 +940,21 @@ void loop(void){
   settings_save(&saved,sizeof(saved));
  }
  int d=encoder(ENC_SELECT);if(d){p.sel=(uint8_t)wrap(p.sel+d,8);if(page==HOME)page=MIX;}
- d=encoder(ENC_PRESETS);if(d){p.style=(uint8_t)wrap(p.style+d,4);generate();pos=0;due=now;}
+ d=encoder(ENC_PRESETS);if(d){p.style=(uint8_t)wrap(p.style+d,4);if(page==SONG_DETAILS)scoped_generate();else generate();pos=0;due=now;remMs=0;}
  int ch=p.sel;
  d=encoder(ENC_ALGORITHM);if(d){
-  if(page==EDIT){chooseInstrument(ch,preset[ch]+d);if(!playing)sound(ch,ch?0:7);}
+  if(page==EDIT||page==HOME||page==MIX||page==SONG_DETAILS){chooseInstrument(ch,preset[ch]+d);if(page==HOME)page=MIX;if(!playing)sound(ch,ch?0:7);}
   else if(page==SECTION_SOUND){if(ch)tune_part(&sectionMix[editSection][ch],PART_RATIO,d);}
   else if(ch)shape[ch]=(uint8_t)wrap(shape[ch]+d,8);
   else drive[0]=clamp(drive[0]+d,0,40);
  }
  d=encoder(ENC_KNOB1);if(d){
   if(page==SECTION_SOUND)editSection=wrap(editSection+d,NS);
-  else p.bpm=(uint8_t)clamp(p.bpm+d,60,180);
+  else {p.bpm=(uint8_t)clamp(p.bpm+d,60,180);if(page==SONG_DETAILS&&songScope==0)songScope=1;}
  }
  d=encoder(ENC_KNOB2);if(d){
-  if(page==GLOBAL)masterLevel=clamp(masterLevel+d,0,100);
+  if(page==SONG_DETAILS){songHarmony.root=(int8_t)(wrap(songHarmony.root+d+6,12)-6);if(songScope==0)songScope=1;}
+  else if(page==GLOBAL)masterLevel=clamp(masterLevel+d,0,100);
   else if(page==SECTION_SOUND)editParameter=wrap(editParameter+d,PART_PARAMS);
   else if(page==SEQ)cursor=wrap(cursor+d,16);
   else if(page==FX)fxParameter=wrap(fxParameter+d,5);
@@ -924,7 +963,8 @@ void loop(void){
   else level[ch]=(uint8_t)clamp(level[ch]+d,0,100);
  }
  d=encoder(ENC_KNOB3);if(d){
-  if(page==GLOBAL)transpose=clamp(transpose+d,-12,12);
+  if(page==SONG_DETAILS){songDensity=clamp(songDensity+d,0,4);if(songScope==0)songScope=1;}
+  else if(page==GLOBAL)transpose=clamp(transpose+d,-12,12);
   else if(page==SECTION_SOUND){
    if(editParameter!=PART_RATIO || ch)tune_part(&sectionMix[editSection][ch],editParameter,d);
   }
@@ -937,7 +977,8 @@ void loop(void){
   else toneDepth[ch]=clamp(toneDepth[ch]+d,0,72);
  }
  d=encoder(ENC_KNOB4);if(d){
-  if(page==GLOBAL)octave=clamp(octave+d,-2,2);
+  if(page==SONG_DETAILS)songScope=wrap(songScope+d,COUNT(songScopes));
+  else if(page==GLOBAL)octave=clamp(octave+d,-2,2);
   else if(page==SECTION_SOUND)tune_part(&sectionMix[editSection][ch],PART_PAN,d);
   else if(page==SEQ){loopSection=wrap(loopSection+d,NS);section=loopSection;repeat=1;}
   else tails[ch]=clamp(tails[ch]+d,ch?9:5,ch?17:14);
