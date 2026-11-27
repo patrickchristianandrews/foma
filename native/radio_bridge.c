@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /* Uses the pinned upstream FM1 Radio decoder, not a simulated audio stream. */
-#include "plat.h"
+#include "app.h"
 #include "../platform/fm1.h"
 #include <string.h>
 #define wifi_st plat_wifi_state()
@@ -35,7 +35,8 @@ static const struct {const char *city,*country;} cities[]={
  {"Berlin","Germany"},{"Tokyo","Japan"},{"Sydney","Australia"},{"Toronto","Canada"},
  {"Mexico City","Mexico"},{"Cape Town","South Africa"},{"Sao Paulo","Brazil"}};
 static unsigned city,station;
-static int browsing,requested,lookup,active,volume=65;
+static int browsing,requested,lookup,active;
+static volatile int volume=65;
 static char url[96],title[32]="Groove Salad",fav_id[12],fav_title[32];
 static const char fallback[]="http://ice4.somafm.com/groovesalad-128-mp3";
 static uint8_t loaded;
@@ -76,7 +77,7 @@ int lw_radio_ui(void){
  fav_load();active=1;int d=encoder(ENC_SELECT),v=encoder(ENC_KNOB1);
  if(v){volume+=v*3;if(volume<0)volume=0;if(volume>100)volume=100;}
  if(button_pressed(BTN_SEL)){browsing=!browsing;}
- if(d){if(browsing){int n=(int)(sizeof cities/sizeof cities[0]);city=(city+d+n)%n;station=0;}else if(rgn_state==2&&rgn_n){int n=(int)rgn_n;station=(station+d+n)%n;}}
+ if(d){if(browsing){int n=(int)(sizeof cities/sizeof cities[0]);city=(unsigned)(((int)city+d%n+n)%n);station=0;}else if(rgn_state==2&&rgn_n){int n=(int)rgn_n;station=(unsigned)(((int)station+d%n+n)%n);}}
  if(button_pressed(BTN_EDIT)){mix_on=0;radio_stop();requested=0;lookup=1;browsing=0;station=0;}
  if(button_pressed(BTN_PLAY)){
   if(radio_st!=RS_OFF&&radio_st!=RS_ERROR){mix_on=0;radio_stop();requested=0;}
