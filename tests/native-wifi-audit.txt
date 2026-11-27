@@ -38,11 +38,11 @@ tap HOME
 expect loop_page 1
 expect loop_track 0
 expect loop_length 16
-expect loop_steps 10
+expect loop_steps 8
 tap EDIT
 expect loop_steps 0
 tap REC
-expect loop_steps 10
+expect loop_steps 8
 turn SELECT 1
 expect loop_track 1
 expect loop_steps 0
@@ -55,3 +55,11 @@ tap PLAY
 expect loop_playing 0
 tap HOME
 expect loop_page 0
+tap HOME
+expect room_patch 9
+turn ALGO 1
+expect room_patch 10
+peakreset
+tapkey w0
+expect room_key_active 1
+expect peak_db_min -45
