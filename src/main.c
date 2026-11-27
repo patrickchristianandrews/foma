@@ -448,9 +448,31 @@ static void weather_hud(uint32_t now){
  rect(199,136,17,14,purple);
  line(207,136,207,116,purple);line(207,128,198,119,purple);
  line(207,124,216,113,purple);
- frame(12,168,68,31,peach);
- frame(19,173,35,20,dim);frame(27,177,19,12,peach);
- line(70,174,59,189,peach);
+ /* Turntable: walnut cabinet, platter, concentric grooves, rotating label
+  * and a tonearm that parks when music stops. No separate audio source. */
+ int recordOn=weather.playing||playing;
+ rect(8,155,79,45,RGB(106,58,45));
+ rect(10,157,75,38,RGB(173,104,71));
+ frame(8,155,79,45,peach);
+ rect(10,195,75,4,RGB(55,32,40));
+ for(int yy=-17;yy<=17;yy++)for(int xx=-17;xx<=17;xx++){
+  int d=xx*xx+yy*yy;
+  if(d>289)continue;
+  uint16_t c=d<=36?RGB(169,99,225):d>=256?RGB(84,88,102):d%37<12?RGB(52,50,65):RGB(23,21,31);
+  pixel(32+xx,176+yy,c);
+ }
+ uint32_t spin=recordOn?now*2386093u:0;
+ int dx=(sine(spin+1073741824u)*12)>>15,dy=(sine(spin)*12)>>15;
+ line(32+dx,176+dy,32+dx/2,176+dy/2,RGB(220,220,235));
+ pixel(32,176,WHITE);
+ rect(65,160,8,8,RGB(49,39,54));frame(65,160,8,8,peach);
+ int armX=recordOn?44:75,armY=recordOn?179:190;
+ line(69,164,recordOn?56:75,169,WHITE);
+ line(recordOn?56:75,169,armX,armY,WHITE);
+ rect(armX-2,armY-1,4,3,RGB(40,35,49));
+ rect(75,191,5,3,recordOn?RGB(99,235,150):dim);
+ if(recordOn){int noteY=151-(int)((now/90u)%8u);line(85,noteY-4,85,noteY+3,purple);rect(81,noteY+1,4,3,purple);line(85,noteY-4,90,noteY-2,purple);}
+
  frame(104,177,23,21,peach);frame(127,180,9,12,peach);
  for(int i=0;i<3;i++){int x=108+i*6;line(x,173,x+2,166-(int)((now/250+i)%3),dim);}
  for(int i=0;i<5;i++)frame(166+i*10,172-i%3*5,8,26+i%3*5,i%2?purple:peach);
@@ -463,7 +485,7 @@ static void weather_hud(uint32_t now){
   if(!moon){format_int(value,offlineTemp);text(124,205,value,WHITE,FONT_SMALL);text(150,205,"C",peach,FONT_SMALL);text(170,205,"DEMO",purple,FONT_SMALL);}
  }
  format_int(value,live?weather.reading.wind10/10:offlineWind);
- if(!moon){text(8,184,"WIND",peach,FONT_SMALL);text(48,184,value,WHITE,FONT_SMALL);}
+ if(!moon){text(8,105,"WIND",peach,FONT_SMALL);text(8,122,value,WHITE,FONT_SMALL);text(8,139,"KM/H",peach,FONT_SMALL);}
  text(8,222,"K1 SKY K2 HR K3 C K4 WIND",peach,FONT_SMALL);
  if(ambientLevel)text(8,35,"AMB",purple,FONT_SMALL);
  if(animalLevel)text(34,35,"CALL",purple,FONT_SMALL);
