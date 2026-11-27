@@ -9,6 +9,12 @@
 #include "fm1.h"
 #include "liquid_song.h"
 #include "tidbit_portrait.h"
+#if defined(__has_include)
+#if __has_include("tidbit_room_generated.h")
+#include "tidbit_room_generated.h"
+#define TIDBIT_ROOM_HIRES 1
+#endif
+#endif
 #include "weather.h"
 #define NC 8
 #define NS 5
@@ -438,12 +444,21 @@ static void weather_hud(uint32_t now){
  rect(8,153,224,47,RGB(82,49,62));
  for(int i=0;i<6;i++)line(8,156+i*8,231,156+i*8,dim);
  rect(88,140,92,12,RGB(125,78,119));
- /* Tidbit: reuse the existing mascot sprite, enlarged for the room. */
+ /* Actual website mascot, rendered at native room resolution rather than
+  * enlarging the tiny sequencer portrait. Gentle note-driven bob. */
+#ifdef TIDBIT_ROOM_HIRES
+ int bob=(int32_t)(active[7]-now)>0 && !(p.mute&(1<<7))?2:0;
+ for(int y=0;y<80;y++)for(int x=0;x<80;x++){
+  uint16_t c=tidbitRoomPortrait[y*80+x];
+  if(c)pixel(96+x,70+y-bob,c);
+ }
+#else
  for(int y=0;y<18;y++)for(int x=0;x<24;x++){
   uint16_t c=tidbitPortrait[y*24+x];
   if(c)rect(98+x*3,96+y*3,3,3,c);
  }
  tidbit_mouth(98,96,3,(int32_t)(active[7]-now)>0 && !(p.mute&(1<<7)),now);
+#endif
  /* Plant, record player, mug and books. */
  rect(199,136,17,14,purple);
  line(207,136,207,116,purple);line(207,128,198,119,purple);
