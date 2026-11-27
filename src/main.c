@@ -676,7 +676,12 @@ static void weather_hud(uint32_t now){
  format_int(value,live?weather.reading.wind10/10:offlineWind);
  if(!moon){text(8,105,"WIND",peach,FONT_SMALL);text(8,122,value,WHITE,FONT_SMALL);text(8,139,"KM/H",peach,FONT_SMALL);}
  if(live){
-  char clock[6]={(char)('0'+minute/600),(char)('0'+minute/60%10),':',(char)('0'+minute%60/10),(char)('0'+minute%10),0};
+  unsigned hour=minute/60u%12u;if(!hour)hour=12;
+  char clock[9];unsigned n=0;
+  if(hour>=10)clock[n++]=(char)('0'+hour/10u);
+  clock[n++]=(char)('0'+hour%10u);clock[n++]=':';
+  clock[n++]=(char)('0'+minute%60u/10u);clock[n++]=(char)('0'+minute%10u);
+  clock[n++]=' ';clock[n++]=minute<720u?'A':'P';clock[n++]='M';clock[n]=0;
   text(8,222,"LOCAL TIME",peach,FONT_SMALL);text(110,222,clock,WHITE,FONT_SMALL);
  }else text(8,222,"K1 SKY K2 HR K3 F K4 WIND",peach,FONT_SMALL);
  if(ambientLevel)text(8,35,"AMB",purple,FONT_SMALL);
