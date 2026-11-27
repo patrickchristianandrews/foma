@@ -34,10 +34,12 @@ static const struct {const char *city,*country;} cities[]={
  {"Los Angeles","United States"},{"London","United Kingdom"},{"Paris","France"},{"Amsterdam","Netherlands"},
  {"Berlin","Germany"},{"Tokyo","Japan"},{"Sydney","Australia"},{"Toronto","Canada"},
  {"Mexico City","Mexico"},{"Cape Town","South Africa"},{"Sao Paulo","Brazil"}};
-static unsigned city,station;
+static unsigned city,station,search_city;
+static int station_valid;
 static int browsing,requested,lookup,active;
 static volatile int volume=65;
 static char url[96],title[32]="Groove Salad",fav_id[12],fav_title[32];
+static const char *notice="";
 static const char fallback[]="http://ice4.somafm.com/groovesalad-128-mp3";
 static uint8_t loaded;
 static volatile int mix_on;
@@ -49,43 +51,57 @@ static void fav_load(void){
  }
 }
 static void fav_save(void){
- if(!rgn_list||station>=rgn_n||rgn_state!=2)return;
+ if(!station_valid||!rgn_list||station>=rgn_n||rgn_state!=2||search_city!=city)return;
  struct {uint32_t magic;char id[12],title[32];} f={0x4c575246u,{0},{0}};
  w_cpy(f.id,rgn_list[station].id,sizeof f.id);w_cpy(f.title,rgn_list[station].title,sizeof f.title);
- if(plat_store_save(OBJ_FAV,&f,sizeof f)==0){w_cpy(fav_id,f.id,sizeof fav_id);w_cpy(fav_title,f.title,sizeof fav_title);}
+ if(plat_store_save(OBJ_FAV,&f,sizeof f)==0){w_cpy(fav_id,f.id,sizeof fav_id);w_cpy(fav_title,f.title,sizeof fav_title);notice="FAVORITE SAVED";}else notice="SAVE FAILED";
 }
 static void station_url(const char *id,const char *name){
+ if(!id||!id[0]){notice="INVALID STATION";return;}
  const char *p="https://radio.garden/api/ara/content/listen/",*suffix="/channel.mp3";unsigned n=0;
  while(*p)url[n++]=*p++;
- for(unsigned i=0;id[i]&&i<11;i++){char c=id[i];if(!((c>='a'&&c<='z')||(c>='A'&&c<='Z')||(c>='0'&&c<='9')||c=='_'||c=='-'))return;url[n++]=c;}
+ for(unsigned i=0;id[i]&&i<11;i++){char c=id[i];if(!((c>='a'&&c<='z')||(c>='A'&&c<='Z')||(c>='0'&&c<='9')||c=='_'||c=='-')){notice="INVALID STATION";return;}url[n++]=c;}
  while(*suffix)url[n++]=*suffix++;url[n]=0;
  w_cpy(title,name,sizeof title);radio_url=url;requested=1;
 }
+int lw_radio_can_power_off(void){return !radio_net_running()&&rgn_state!=1;}
+static void release_buffers(void){
+ if(radio_net_running()||!net_buf)return;
+ uint32_t flags=plat_lock();
+ mix_on=0;uint8_t *net=net_buf,*lin=lin_buf;int16_t *pcm=pcm_buf;
+ net_buf=0;lin_buf=0;pcm_buf=0;pcm_r=pcm_w=0;radio_frac=0;
+ plat_unlock(flags);
+ free(net);free(lin);free(pcm);
+}
 void lw_radio_service(void){
  if(!active){
-  if(!radio_net_running()&&radio_st==RS_OFF&&net_buf){free(net_buf);free(pcm_buf);free(lin_buf);net_buf=0;pcm_buf=0;lin_buf=0;}
+  if(radio_st==RS_OFF)release_buffers();
   return;
  }
- if(plat_wifi_state()!=WIFI_CONNECTED){mix_on=0;if(radio_st!=RS_OFF)radio_stop();return;}
+ if(plat_wifi_state()!=WIFI_CONNECTED){mix_on=0;if(radio_st!=RS_OFF)radio_stop();release_buffers();notice="CONNECT WI-FI FIRST";return;}
+ if(rgn_state==2&&search_city==city&&!lookup)station_valid=1;
  if(lookup&&!radio_net_running()&&rgn_state!=1){
-  lookup=0;rgn_start(cities[city].city,cities[city].country);
+  lookup=0;station_valid=0;search_city=city;
+  if(rgn_start(cities[city].city,cities[city].country)!=0){notice="STATION SEARCH FAILED";}else notice="";
  }
  if(requested&&!lookup&&rgn_state!=1&&!radio_net_running()){
-  requested=0;radio_frac=0;radio_play(0);mix_on=1;
+  requested=0;radio_frac=0;radio_play(0);mix_on=radio_st!=RS_ERROR;
  }
  radio_poll();
+ if(radio_st==RS_ERROR){mix_on=0;radio_net_stop();if(!radio_net_running()){dec_drop();release_buffers();}}
 }
 void lw_radio_leave(void){active=0;requested=lookup=0;mix_on=0;radio_stop();}
 int lw_radio_ui(void){
  fav_load();active=1;int d=encoder(ENC_SELECT),v=encoder(ENC_KNOB1);
  if(v){volume+=v*3;if(volume<0)volume=0;if(volume>100)volume=100;}
  if(button_pressed(BTN_SEL)){browsing=!browsing;}
- if(d){if(browsing){int n=(int)(sizeof cities/sizeof cities[0]);city=(unsigned)(((int)city+d%n+n)%n);station=0;}else if(rgn_state==2&&rgn_n){int n=(int)rgn_n;station=(unsigned)(((int)station+d%n+n)%n);}}
- if(button_pressed(BTN_EDIT)){mix_on=0;radio_stop();requested=0;lookup=1;browsing=0;station=0;}
+ if(d){if(browsing){int n=(int)(sizeof cities/sizeof cities[0]);city=(unsigned)(((int)city+d%n+n)%n);station=0;station_valid=0;notice="EDIT TO SEARCH CITY";}else if(station_valid&&rgn_state==2&&rgn_n){int n=(int)rgn_n;station=(unsigned)(((int)station+d%n+n)%n);}}
+ if(button_pressed(BTN_EDIT)){mix_on=0;radio_stop();requested=0;lookup=1;browsing=0;station=0;station_valid=0;notice="";}
  if(button_pressed(BTN_PLAY)){
   if(radio_st!=RS_OFF&&radio_st!=RS_ERROR){mix_on=0;radio_stop();requested=0;}
-  else if(rgn_state==2&&rgn_list&&station<rgn_n)station_url(rgn_list[station].id,rgn_list[station].title);
-  else {radio_url=fallback;w_cpy(title,"Groove Salad",sizeof title);requested=1;}
+  else if(station_valid&&search_city==city&&rgn_state==2&&rgn_list&&station<rgn_n)station_url(rgn_list[station].id,rgn_list[station].title);
+  else if(browsing||lookup||rgn_state==1){notice="WAIT FOR STATIONS";}
+  else {radio_url=fallback;w_cpy(title,"Groove Salad",sizeof title);requested=1;notice="";}
  }
  if(button_pressed(BTN_SAVE)&&radio_st==RS_OFF)fav_save();
  if(button_pressed(BTN_SEQ)&&fav_id[0]){mix_on=0;radio_stop();station_url(fav_id,fav_title);}
@@ -102,10 +118,10 @@ void lw_radio_draw(void){
  label_at(32,cities[city].city,WHITE);
  label_at(50,cities[city].country,WHITE);
  label_at(72,browsing?"SELECT CITY / EDIT SEARCH":rgn_state==1?"SEARCHING STATIONS":rgn_state==3?rgn_why:"SELECT STATION",cyan);
- if(rgn_state==2&&rgn_list&&station<rgn_n)label_at(91,rgn_list[station].title,WHITE);
+ if(station_valid&&search_city==city&&rgn_state==2&&rgn_list&&station<rgn_n)label_at(91,rgn_list[station].title,WHITE);
  label_at(115,title,WHITE);
  static const char *const states[]={"OFF","CONNECTING","BUFFERING","PLAYING","ERROR"};
- label_at(135,radio_st==RS_ERROR?radio_why:states[radio_st<5?radio_st:0],cyan);
+ label_at(135,radio_st==RS_ERROR?radio_why:*notice?notice:states[radio_st<5?radio_st:0],cyan);
  char vol[12];format_int(vol,volume);label_at(155,"K1 RADIO VOLUME",WHITE);text(184,155,vol,WHITE,FONT_SMALL);
  label_at(175,"SEL CITY / EDIT SEARCH",WHITE);
  label_at(193,"PLAY / SAVE FAV / SEQ FAV",WHITE);
