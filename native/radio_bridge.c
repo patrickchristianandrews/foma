@@ -62,13 +62,16 @@ static void station_url(const char *id,const char *name){
  w_cpy(title,name,sizeof title);radio_url=url;requested=1;
 }
 void lw_radio_service(void){
- if(!active)return;
+ if(!active){
+  if(!radio_net_running()&&radio_st==RS_OFF&&net_buf){free(net_buf);free(pcm_buf);free(lin_buf);net_buf=0;pcm_buf=0;lin_buf=0;}
+  return;
+ }
  if(plat_wifi_state()!=WIFI_CONNECTED){mix_on=0;if(radio_st!=RS_OFF)radio_stop();return;}
  if(lookup&&!radio_net_running()&&rgn_state!=1){
   lookup=0;rgn_start(cities[city].city,cities[city].country);
  }
  if(requested&&!lookup&&rgn_state!=1&&!radio_net_running()){
-  requested=0;radio_play(0);mix_on=1;
+  requested=0;radio_frac=0;radio_play(0);mix_on=1;
  }
  radio_poll();
 }
@@ -86,7 +89,10 @@ int lw_radio_ui(void){
  }
  if(button_pressed(BTN_SAVE)&&radio_st==RS_OFF)fav_save();
  if(button_pressed(BTN_SEQ)&&fav_id[0]){mix_on=0;radio_stop();station_url(fav_id,fav_title);}
- return 1;
+ static uint32_t last_draw;
+ uint32_t now=plat_ms();
+ if(d||v||button_pressed(BTN_SEL)||button_pressed(BTN_EDIT)||button_pressed(BTN_PLAY)||button_pressed(BTN_SAVE)||button_pressed(BTN_SEQ)||now-last_draw>=250u){last_draw=now;return 1;}
+ return 0;
 }
 static void label_at(int y,const char *s,uint16_t c){char b[28];w_cpy(b,s,sizeof b);text(8,y,b,c,FONT_SMALL);}
 void lw_radio_draw(void){
