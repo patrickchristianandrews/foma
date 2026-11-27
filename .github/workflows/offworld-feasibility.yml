@@ -1,4 +1,4 @@
-name: OFFWORLD full DSP feasibility build
+name: Liquid Wave Night Drift feasibility build
 on:
   push:
     branches: [liquid-wave-offworld-development]
@@ -57,17 +57,18 @@ jobs:
           JIELI_TOOLCHAIN: /home/runner/.jieli/toolchain
           AC79_SDK: /home/runner/fw-AC79_AIoT_SDK
         run: |
-          # Keep realtime DSP, synth and decoder at O2. Size-optimize platform/UI,
-          # font drawing, song generation, weather parsing and installer glue.
+          # Measure compact device code generation for all integration units.
+          # Physical render deadlines remain a separate required test.
           python3 - "$RUNNER_TEMP/fm1-base/tools/build.py" <<'PY'
           import pathlib, sys
           p=pathlib.Path(sys.argv[1])
           s=p.read_text()
           a='units.append(("cc", *o2, *o2_more, *inc(f.parent), *ir_out, "-c", f, "-o", o.with_suffix(".ll") if ir else o))'
-          b='unit_flags = o2 if f.name in ("main.c", "engine.c", "radio_bridge.c") else [("-Oz" if v == "-O2" else v) for v in o2]\n            units.append(("cc", *unit_flags, *o2_more, *inc(f.parent), *ir_out, "-c", f, "-o", o.with_suffix(".ll") if ir else o))'
+          b='unit_flags = [("-Oz" if v == "-O2" else v) for v in o2]\n            units.append(("cc", *unit_flags, *o2_more, *inc(f.parent), *ir_out, "-c", f, "-o", o.with_suffix(".ll") if ir else o))'
           assert s.count(a)==1
           s=s.replace(a,b)
           s=s.replace('("cc", *flags, *ir_out, "-c", SRC / "device" / "unity.c"', '("cc", *[("-Oz" if v=="-Os" else v) for v in flags], *ir_out, "-c", SRC / "device" / "unity.c"')
+          s=s.replace('"--gc-sections", "-e", "_start", "-T", ld,','"--gc-sections", "-Map", str(OUT / "device-link.map"), "-e", "_start", "-T", ld,')
           p.write_text(s)
           PY
           python3 "$RUNNER_TEMP/fm1-base/tools/build.py" "$GITHUB_WORKSPACE/native"
