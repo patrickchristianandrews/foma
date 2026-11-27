@@ -131,6 +131,13 @@ static uint32_t bootStarted, lastWave;
 #define SURF_Y 145
 #define SURF_COLOR RGB(16,67,96)
 static int booting = 1;
+#if defined(FOMA_NATIVE_WIFI) && FOMA_NATIVE_WIFI
+static int native_boot_clock_started;
+#define BOOT_WAVE_MS 1400u
+#else
+#define BOOT_WAVE_MS 780u
+#endif
+int liquid_boot_complete(void){return !booting;}
 static struct {
  LiquidWeather reading;
  LiquidWeatherMusic music;
@@ -248,6 +255,10 @@ void audio(int32_t *out,uint32_t frames){
  if(ke>32){kp+=ki;ki-=(ki-kbase)>>9;drums+=(sine(kp)*ke)>>17;ke-= (ke>>drumTail) ? (ke>>drumTail) : 1;}
  if(se>32){drums+=(nz*se)>>17;se-= (se>>(drumTail-1)) ? (se>>(drumTail-1)) : 1;}
  if(he>32){drums+=((nz-prevNoise)*he)>>18;he-= (he>>(drumTail-1)) ? (he>>(drumTail-1)) : 1;}prevNoise=nz;
+#if defined(FOMA_NATIVE_WIFI) && FOMA_NATIVE_WIFI
+ /* Percussion-only +4.9 dB makeup, before the existing output limiter. */
+ drums+=drums*3/4;
+#endif
  mix_sample(drums,drumPan,&sum,&left,&right);
  /* Separate optional weather ambience and dog/bird calls. */
  if(ambientLevel||animalLevel||animalRemaining){
@@ -693,7 +704,7 @@ static void boot_wave(uint32_t elapsed) {
   text(32,72,"LIQUID WAVE",RGB(190,120,255),FONT_BIG);
   text(64,108,"ADVANCED BETA 2",WHITE,FONT_SMALL);
  }
- int front=(int)(elapsed*300u/780u);
+ int front=(int)(elapsed*300u/BOOT_WAVE_MS);
  if(front==previous)return;
  for(int x=0;x<SCREEN_W;x+=3){
   if(previous>=0 && x<=previous && x>previous-55)rect(x,122,3,48,BLACK);
@@ -1089,7 +1100,12 @@ void loop(void){
  uint32_t now=millis();
  int skippedBoot=0;
  if(booting){
-  if(now-bootStarted<780 && !button_pressed(BTN_HOME) && !button_pressed(BTN_PLAY)){
+#if defined(FOMA_NATIVE_WIFI) && FOMA_NATIVE_WIFI
+  /* The board can spend time initializing after setup(); count visible frames
+   * from the first interactive loop rather than from early setup. */
+  if(!native_boot_clock_started){native_boot_clock_started=1;bootStarted=now;}
+#endif
+  if(now-bootStarted<BOOT_WAVE_MS && !button_pressed(BTN_HOME) && !button_pressed(BTN_PLAY) && !keys()){
    boot_wave(now-bootStarted);
    return;
   }
