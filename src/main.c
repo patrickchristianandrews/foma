@@ -34,7 +34,7 @@ static int native_radio_mode;
 
 typedef struct { uint32_t magic; uint8_t style,bpm,sel,mute; uint8_t pat[NS][NC][16]; } Project;
 static Project p;
-enum {HOME, MIX, ENV, MOTION, EDIT, GLOBAL, FX, SEQ, SECTION_SOUND, WEATHER, SONG_DETAILS, RADIO, CATALOG, LOOP_BUILDER};
+enum {HOME, MIX, ENV, MOTION, EDIT, GLOBAL, FX, SEQ, SECTION_SOUND, WEATHER, SONG_DETAILS, RADIO, CATALOG, LOOP_BUILDER, OCEAN_VIS};
 static int page, cursor, octave, loopSection, repeat, transpose;
 static volatile int masterLevel=100;
 static uint8_t level[8]={85,85,85,85,85,85,85,85};
@@ -769,11 +769,36 @@ static void boot_wave(uint32_t elapsed) {
 }
 /* LCD adaptations of RandomCandyLand Liquid Wave's character shapes and palette.
  * Bass Cat belongs on the stage; Tidbit's weather room has no cat. */
+#if defined(FOMA_NATIVE_WIFI) && FOMA_NATIVE_WIFI
+static int portrait_large,portrait_x,portrait_y;
+static int px5(int x){return portrait_x+(x-portrait_x)*5/4;}
+static int py5(int y){return portrait_y+(y-portrait_y)*5/4;}
+static void portrait_rect(int x,int y,int w,int h,uint16_t c){
+ if(!portrait_large){rect(x,y,w,h,c);return;}
+ rect(px5(x),py5(y),px5(x+w)-px5(x),py5(y+h)-py5(y),c);
+}
+static void portrait_pixel(int x,int y,uint16_t c){portrait_rect(x,y,1,1,c);}
+static void portrait_line(int x,int y,int xx,int yy,uint16_t c){
+ if(portrait_large)line(px5(x),py5(y),px5(xx),py5(yy),c);
+ else line(x,y,xx,yy,c);
+}
+static void portrait_frame(int x,int y,int w,int h,uint16_t c){
+ if(portrait_large)frame(px5(x),py5(y),px5(x+w)-px5(x),py5(y+h)-py5(y),c);
+ else frame(x,y,w,h,c);
+}
+#define pixel portrait_pixel
+#define rect portrait_rect
+#define line portrait_line
+#define frame portrait_frame
+#endif
 static void mascot_ellipse(int x,int y,int rx,int ry,uint16_t c){
  for(int dy=-ry;dy<=ry;dy++)for(int dx=-rx;dx<=rx;dx++)
   if(dx*dx*ry*ry+dy*dy*rx*rx<=rx*rx*ry*ry)pixel(x+dx,y+dy,c);
 }
 static void portrait_at(int i,int x,int y){
+#if defined(FOMA_NATIVE_WIFI) && FOMA_NATIVE_WIFI
+ portrait_x=x;portrait_y=y;
+#endif
  static const uint16_t palette[]={RGB(201,139,90),RGB(180,140,240),RGB(255,226,122),RGB(127,208,255),RGB(255,179,217),RGB(143,240,164),RGB(255,210,166)};
  static const uint16_t light[]={RGB(243,210,176),RGB(236,220,255),RGB(255,246,201),RGB(223,244,255),RGB(255,227,241),RGB(215,255,224),RGB(255,240,224)};
  int muted=(p.mute&(1<<i))!=0;
@@ -784,6 +809,10 @@ static void portrait_at(int i,int x,int y){
    uint16_t color=tidbitPortrait[row*24+tx];
    if(color)pixel(x+tx,y+row,muted?(uint16_t)((color&0xf7deu)>>1):color);
   }
+#if defined(FOMA_NATIVE_WIFI) && FOMA_NATIVE_WIFI
+  if(portrait_large){if(hit){rect(x+11,y+11,4,3,RGB(42,19,30));pixel(x+12,y+13,RGB(233,116,148));}}
+  else
+#endif
   tidbit_mouth(x,y,1,hit,now);
  }else{
   uint16_t c=muted?RGB(169,163,173):palette[i], l=muted?RGB(214,209,218):light[i];
@@ -815,6 +844,12 @@ static void portrait_at(int i,int x,int y){
  }
  if(i==p.sel)frame(x-1,y-1,26,20,WHITE);
 }
+#if defined(FOMA_NATIVE_WIFI) && FOMA_NATIVE_WIFI
+#undef pixel
+#undef rect
+#undef line
+#undef frame
+#endif
 /* Surface is drawn over the lower part of each swimmer; foreground foam is
  * deliberately separate from the distant whitecapped waves. */
 enum { SWIM_FLOAT, SWIM_PADDLE, SWIM_SURF, SWIM_DIVE, SWIM_LEAP, SWIM_SPLASH };
@@ -838,9 +873,18 @@ static void faceDraw(int i){
  Face *a=&f[i];
  int water=surface_at(a->x+12,millis());
  if(a->y<water){
+#if defined(FOMA_NATIVE_WIFI) && FOMA_NATIVE_WIFI
+  portrait_large=1;
+#endif
   portrait_at(i,a->x,a->y);
+#if defined(FOMA_NATIVE_WIFI) && FOMA_NATIVE_WIFI
+  portrait_large=0;
+  int lower=a->y+24-water;
+  if(lower>0){rect(a->x-1,water,33,lower,SURF_COLOR);line(a->x-1,water,a->x+30,water,RGB(124,211,233));}
+#else
   int lower=a->y+19-water;
   if(lower>0){rect(a->x-1,water,26,lower,SURF_COLOR);line(a->x-1,water,a->x+24,water,RGB(124,211,233));}
+#endif
  }
  a->ox=a->x;a->oy=a->y;
 }
@@ -852,11 +896,11 @@ static void swimmer_step(int i,uint32_t now){
  if(stage_singing(i,now)){
   int bob=sine(now*260000u+(uint32_t)i*536870912u)>>14;
   /* Hover in two rows just below the plane's banner, clear of water. */
-  int target=92+(i/4)*21+bob;
+  int target=92+(i/4)*24+bob;
   int lane=8+(i%4)*55;
   a->y+=clamp(target-a->y,-12,12);
   /* On entry, clear the water immediately rather than singing submerged. */
-  if(a->y>surface_at(a->x+12,now)-22)a->y=surface_at(a->x+12,now)-22;
+  if(a->y>surface_at(a->x+12,now)-27)a->y=surface_at(a->x+12,now)-22;
   a->x+=clamp(lane-a->x,-4,4);
   if(a->x<8){a->x=8;a->vx=1;}
   if(a->x>208){a->x=208;a->vx=-1;}
@@ -1223,10 +1267,62 @@ static void lb_hud(void){
  text(8,205,"EDIT CLEAR / REC UNDO",WHITE,FONT_SMALL);
  text(8,222,"PLAY PREVIEW / HOME EXIT",cyan,FONT_SMALL);
 }
+static volatile unsigned ocean_peak;
+void lw_ocean_peak(unsigned peak){ocean_peak=peak;}
+static int ocean_palette,ocean_speed=3,ocean_swell=12,ocean_characters=1;
+static void ocean_hud(uint32_t now){
+ static const uint16_t palettes[3][4]={
+ {RGB(8,31,62),RGB(10,76,111),RGB(15,155,190),RGB(138,244,246)},
+ {RGB(30,19,67),RGB(83,36,126),RGB(179,77,193),RGB(255,174,218)},
+ {RGB(13,40,51),RGB(12,94,85),RGB(54,170,124),RGB(204,250,160)}};
+ const uint16_t *c=palettes[ocean_palette];
+ int pulse=clamp((int)(ocean_peak>>18),0,30);
+ uint32_t phase=now*(unsigned)(ocean_speed+1)*170000u;
+ rect(0,0,240,240,c[0]);
+ /* Horizon, reflected moonlight and three independently rolling surf layers. */
+ for(int y=24;y<100;y+=8)rect(0,y,240,8,y<56?c[0]:c[1]);
+ mascot_ellipse(180,51,18,18,RGB(255,218,163));
+ for(int band=0;band<3;band++){
+  int previous=0;
+  for(int x=0;x<240;x+=3){
+   int amp=ocean_swell+band*4+pulse/2;
+   int y=93+band*38+(sine((uint32_t)x*(19000000u+band*6000000u)-phase*(band+1))*amp>>15);
+   y=clamp(y,67,208);
+   rect(x,y,3,216-y,c[band]);
+   if(x)line(x-3,previous,x,y,c[band+1]);
+   if((x/3+now/90u+band*3)%11==0)rect(x,y-2,2,2,WHITE);
+   previous=y;
+  }
+ }
+ if(ocean_characters)for(int i=0;i<NC;i++){
+  int x=7+(i%4)*57,y=83+(i/4)*28+((sine(phase+(uint32_t)i*536870912u)*5)>>15);
+  portrait_large=1;portrait_at(i,x,y);portrait_large=0;
+ }
+ text(5,3,"7 / OCEAN VISUALIZER",WHITE,FONT_SMALL);battery_hud();
+ rect(0,216,240,24,BLACK);
+ text(5,220,"PLAY / K1 SPEED / K2 SWELL",WHITE,FONT_SMALL);
+}
+static void ocean_input(uint32_t now){
+ int d=encoder(ENC_KNOB1);if(d)ocean_speed=clamp(ocean_speed+d,0,7);
+ d=encoder(ENC_KNOB2);if(d)ocean_swell=clamp(ocean_swell+d,3,24);
+ if(button_pressed(BTN_SEL))ocean_palette=wrap(ocean_palette+1,3);
+ if(button_pressed(BTN_EDIT))ocean_characters=!ocean_characters;
+ if(button_pressed(BTN_PLAY)){
+  if(playing||lb_playing){playing=0;lb_stop();}
+  else {playing=1;pos=0;due=now;remMs=0;}
+ }
+ if(lb_playing)lb_service(now);
+ int budget=0;while(playing&&(int32_t)(now-due)>=0&&budget++<4){
+  transport();due+=15000/p.bpm;remMs+=15000%p.bpm;
+  if(remMs>=p.bpm){due++;remMs-=p.bpm;}
+ }
+ for(int k=0;k<KEY_COUNT;k++)if(key_pressed(k))sound(p.sel,p.sel?k%13:1<<(k%4));
+}
 #ifdef PLAT_HOST
 #include <string.h>
 int lw_loop_expect(const char *name,int *v){
- if(!strcmp(name,"room_patch"))*v=room_patch;
+ if(!strcmp(name,"ocean_page"))*v=page==OCEAN_VIS;
+ else if(!strcmp(name,"room_patch"))*v=room_patch;
  else if(!strcmp(name,"room_key_active"))*v=(int32_t)(room_key_until-millis())>0;
  else if(!strcmp(name,"loop_page"))*v=page==LOOP_BUILDER;
  else if(!strcmp(name,"loop_playing"))*v=lb_playing;
@@ -1240,6 +1336,7 @@ int lw_loop_expect(const char *name,int *v){
 #endif
 static void hud(void){
 #if defined(FOMA_NATIVE_WIFI) && FOMA_NATIVE_WIFI
+ if(page==OCEAN_VIS){ocean_hud(millis());return;}
  if(page==LOOP_BUILDER){lb_hud();return;}
  if(page==FX){sound_menu_hud();return;}
 #endif
@@ -1300,6 +1397,9 @@ static void panel_lights(uint32_t now){
   available=LIT(BTN_SEL)|LIT(BTN_SAVE)|LIT(BTN_GLO)|LIT(BTN_EDIT)|LIT(BTN_PLAY)|LIT(BTN_ARP)|LIT(BTN_SEQ);
 #endif
 #if defined(FOMA_NATIVE_WIFI) && FOMA_NATIVE_WIFI
+ }else if(page==OCEAN_VIS){
+  available=LIT(BTN_PLAY)|LIT(BTN_SEL)|LIT(BTN_EDIT);
+  if(playing||lb_playing)active|=LIT(BTN_PLAY);
  }else if(page==LOOP_BUILDER){
   available=LIT(BTN_PLAY)|LIT(BTN_ARP)|LIT(BTN_SEL)|LIT(BTN_EDIT)|LIT(BTN_REC);
   if(lb_playing)active|=LIT(BTN_PLAY);
@@ -1478,7 +1578,8 @@ void loop(void){
  if(playing){playing=0;releaseRequested=1;}page=CATALOG;catalog_hud();lastHud=now;panel_lights(now);return;}
 #if defined(FOMA_NATIVE_WIFI) && FOMA_NATIVE_WIFI
   if(page==CATALOG){catalog_stop();if(playing){playing=0;releaseRequested=1;}lb_init();page=LOOP_BUILDER;lb_hud();lastHud=now;panel_lights(now);return;}
-  if(page==LOOP_BUILDER)lb_stop();
+  if(page==LOOP_BUILDER){page=OCEAN_VIS;ocean_hud(now);lastHud=now;panel_lights(now);return;}
+  if(page==OCEAN_VIS){lb_stop();playing=0;releaseRequested=1;}
 #endif
   if(page==CATALOG)catalog_stop();
   if(page==HOME&&!skippedBoot){
@@ -1495,6 +1596,7 @@ void loop(void){
   for(int i=0;i<NC;i++)faceDraw(i);
  }
 #if defined(FOMA_NATIVE_WIFI) && FOMA_NATIVE_WIFI
+ if(page==OCEAN_VIS){ocean_input(now);if(now-lastHud>=90){lastHud=now;ocean_hud(now);}panel_lights(now);return;}
  if(page==LOOP_BUILDER){
   lb_input(now);
   if(now-lastHud>=70){lastHud=now;lb_hud();}
@@ -1662,7 +1764,7 @@ void loop(void){
  if(now-lastFace>=85&&page==HOME){lastFace=now;
  /* Clear old silhouettes and wakes before compositing the next ocean frame. */
  for(int j=0;j<NC;j++){
-  Face *a=&f[j];int x=clamp(a->ox-11,0,239),w=clamp(46,1,240-x);
+  Face *a=&f[j];int x=clamp(a->ox-11,0,239),w=clamp(55,1,240-x);
   int top=clamp(a->oy-3,90,137);
   if(top<137)rect(x,top,w,137-top,BLACK);
   rect(x,125,w,12,BLACK);
