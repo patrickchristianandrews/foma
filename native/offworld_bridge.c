@@ -90,41 +90,71 @@ static void orb(int x,int y,int r,uint16_t color){
   if(j)rect(x-d,y+j,2*d+1,1,color);
  }
 }
+/* Layered neon skyline, hovering saucer and musical tractor beam.
+ * Draw directly into the existing canvas; no extra heap or assets. */
 static void alien_draw(uint32_t now){
  static const uint16_t sky[NWORLD]={RGB(12,14,48),RGB(12,42,25),RGB(30,9,48),RGB(6,32,55),RGB(52,14,10),RGB(15,22,43),RGB(34,11,36),RGB(10,28,50)};
  static const uint16_t glow[NWORLD]={RGB(80,220,255),RGB(100,255,120),RGB(230,120,255),RGB(70,255,210),RGB(255,140,60),RGB(210,235,100),RGB(255,100,200),RGB(150,220,255)};
- uint16_t ink=glow[scene],dark=RGB(12,18,30);
+ uint16_t ink=glow[scene],dark=RGB(12,18,30),far=RGB(40,42,66);
  int pulse=bound((int)(eng_level()*30.0f),0,30);
  rect(4,46,232,91,sky[scene]);frame(3,45,234,93,ink);
- for(int i=0;i<24;i++){
+ for(int i=0;i<26;i++){
   unsigned h=world_hash((unsigned)(i+scene*31+7));
-  int x=8+(int)(h%222u),y=50+(int)((h>>12)%45u);
-  pixel(x,y,((now/300u+i)%5u==0)?ink:RGB(150,160,190));
+  pixel(8+(int)(h%222u),50+(int)((h>>12)%38u),((now/300u+i)%5u==0)?ink:RGB(150,160,190));
  }
- int px=177,py=76;
- orb(px,py,19,ink);orb(px+5,py-5,14,sky[scene]);
+ int px=191,py=68;
+ orb(px,py,15,ink);orb(px+4,py-4,11,sky[scene]);
  if(scene==0||scene==7){
-  line(px-30,py+9,px+30,py-9,ink);
-  line(px-27,py+12,px+28,py-5,RGB(190,180,220));
+  line(px-24,py+8,px+24,py-8,ink);
+  line(px-22,py+11,px+22,py-5,RGB(190,180,220));
  }
- rect(4,112,232,25,dark);
+ /* Background towers provide depth; foreground buildings have stable profiles
+  * and animated windows. Every world changes the architectural silhouette. */
+ for(int i=0;i<14;i++){
+  unsigned h=world_hash((unsigned)(i+scene*37+23));
+  int x=5+i*16,ht=13+(int)(h%25u);
+  rect(x,128-ht,15,ht,far);
+  rect(x+4,125-ht,7,3,far);
+ }
  for(int i=0;i<9;i++){
   unsigned h=world_hash((unsigned)(i+scene*19+13));
-  int x=10+i*26,ht=10+(int)(h%22u),y=117-ht;
-  if(scene==1){rect(x, y+6,3,ht,ink);orb(x+1,y+3,6,ink);orb(x+1,y+1,3,sky[scene]);}
-  else if(scene==3||scene==6){line(x-5,124,x+4,y,ink);line(x+4,y,x+12,124,ink);line(x+4,y,x+4,124,RGB(100,140,170));}
-  else {line(x-7,122,x+3,y,ink);line(x+3,y,x+13,122,ink);line(x-7,122,x+13,122,RGB(60,90,120));}
+  int x=8+i*25,ht=23+(int)(h%33u),w=17+(int)((h>>8)%6u),y=130-ht;
+  rect(x,y,w,ht,dark);
+  rect(x+1,y,1,ht,far);
+  rect(x,y,w,1,ink);
+  if((i+scene)%3==0){rect(x+4,y-3,w-8,3,dark);line(x+w/2,y-8,x+w/2,y-3,ink);pixel(x+w/2,y-9,WHITE);}
+  else if((i+scene)%3==1){rect(x+3,y-4,w-6,4,far);rect(x+6,y-7,w-12,3,dark);}
+  for(int j=0;j<(ht-5)/7;j++)for(int k=0;k<2;k++){
+   unsigned q=h+(unsigned)(j*13+k*37);
+   if(q%5u)rect(x+4+k*7,y+4+j*7,3,3,((q+now/450u)%9u==0||(latched&&(j+k)%4==0))?ink:RGB(125,110,90));
+  }
  }
- /* A drifting alien vessel and a note-reactive tractor beam. */
- int ship=16+(int)((now/55u)%141u),sy=77+(int)((now/600u)%3u);
- rect(ship-9,sy,19,3,ink);rect(ship-5,sy-3,11,3,RGB(185,220,220));
- rect(ship-5,sy+3,11,2,ink);
- if(latched||pulse>3){line(ship-4,sy+5,ship-11,110,ink);line(ship+4,sy+5,ship+11,110,ink);}
- for(int i=0;i<7;i++){
-  int x=12+i*32;
-  int h=2+(pulse*(1+(int)((i+now/120u)%4u)))/8;
-  if(h>15)h=15;
-  rect(x,134-h,18,h,ink);
+ rect(4,130,232,7,dark);
+ line(4,130,235,130,far);
+ /* Smooth back-and-forth saucer flight; beam expands with the music. */
+ int travel=(int)((now/38u)%320u);
+ int ship=35+(travel>160?320-travel:travel);
+ int bob=(int)((now/160u)%8u);
+ int sy=64+(bob>4?8-bob:bob);
+ if(latched||pulse>3){
+  int spread=9+pulse/2;
+  uint16_t beam=RGB(80,150,160);
+  line(ship-6,sy+6,ship-spread,119,beam);
+  line(ship+6,sy+6,ship+spread,119,beam);
+  for(int i=-4;i<=4;i+=2)line(ship+i,sy+7,ship+i*spread/4,119,far);
+  line(ship-spread,119,ship+spread,119,ink);
+ }
+ /* Recognizable domed flying saucer with cycling navigation lights. */
+ orb(ship,sy-3,7,ink);
+ orb(ship-2,sy-5,3,RGB(210,245,240));
+ rect(ship-18,sy,37,3,far);rect(ship-23,sy+3,47,4,ink);
+ rect(ship-19,sy+7,39,3,far);rect(ship-12,sy+10,25,2,ink);
+ for(int i=0;i<6;i++)rect(ship-17+i*7,sy+4,3,2,((now/110u+i)%6u==0)?WHITE:dark);
+ /* Weather stays tied to K4, visually above the rooftops. */
+ for(int i=0;i<macros[3]/8;i++){
+  unsigned q=world_hash((unsigned)i+scene*91u);
+  int x=7+(int)((q+(now/35u)*2u)%222u),y=50+(int)(((q>>8)+now/13u)%38u);
+  line(x,y,x-2,y+4,RGB(86,120,155));
  }
 }
 void lw_offworld_draw(void){
