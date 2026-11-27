@@ -52,9 +52,17 @@ async function device(saved) {
       return [left.some(value => value !== 0), right.some(value => value !== 0)];
     },
     led: n => Boolean(panel.web_led_buttons() & (1 << n)),
+    backlight: () => panel.web_led_backlight(),
   };
 }
 
+// Sample a complete pulse period: available controls alternate, active
+// controls remain bright, and unavailable controls have only locator light.
+function pulses(dev,button){
+ const states=new Set([dev.led(button)]);
+ for(let i=0;i<10;i++){dev.advance(110);states.add(dev.led(button));}
+ return states.size===2;
+}
 const fm1 = await device();
 const startup = fm1.frame();
 assert(!fm1.led(HOME));
@@ -62,6 +70,9 @@ fm1.advance(350);
 assert.notDeepEqual(fm1.frame(), startup, 'boot wave moves across the screen');
 fm1.advance(500);
 assert(fm1.led(HOME), 'boot enters Stage');
+assert.equal(fm1.backlight(),1,'dim locator backlight always on');
+assert(pulses(fm1,ARP),'available song generation blinks');
+assert(pulses(fm1,PLAY),'available Play blinks while stopped');
 const stage = fm1.frame();
 fm1.advance(110);
 const waves = fm1.frame();
@@ -113,9 +124,11 @@ fm1.tap(SAVE);
 assert.notDeepEqual(fm1.store(), first, 'New Song replaces the saved composition after SAVE');
 fm1.tap(PLAY);
 assert(fm1.led(PLAY), 'Play control');
+assert(!pulses(fm1,PLAY)&&fm1.led(PLAY),'active Play stays bright');
+assert(!pulses(fm1,SAVE)&&!fm1.led(SAVE),'Save unavailable during playback');
 assert(fm1.advance(1000), 'generated song produces audio');
 fm1.tap(PLAY);
-assert(!fm1.led(PLAY), 'Stop control');
+assert(pulses(fm1,PLAY), 'Stop control'+' (available, not steady)');
 
 const rebooted = await device(first);
 rebooted.tap(HOME);
@@ -142,7 +155,7 @@ assert(weather.led(PLAY), 'Stage starts before switching to Weather');
 weather.tap(HOME);
 assert(weather.led(PLAY), 'entering Weather lets the Stage song keep playing');
 weather.tap(PLAY);
-assert(!weather.led(PLAY), 'PLAY stops the Stage song from Weather even without a reading');
+assert(pulses(weather,PLAY), 'PLAY stops the Stage song from Weather even without a reading'+' (available, not steady)');
 weather.advance(3000);
 assert(!weather.advance(250), 'Stage playback stays stopped after its sound has decayed');
 const weatherHome = weather.frame();
@@ -150,7 +163,7 @@ weather.tap(PLAY);
 assert(weather.led(PLAY), 'offline Earth weather music starts without Wi-Fi');
 assert(weather.advance(1500), 'offline weather produces audio');
 weather.tap(PLAY);
-assert(!weather.led(PLAY), 'offline weather stops');
+assert(pulses(weather,PLAY), 'offline weather stops'+' (available, not steady)');
 weather.tap(OCT_UP);
 assert.notDeepEqual(weather.frame(), weatherHome, 'OCT+ moves to another destination');
 weather.hold(OCT_UP, 3100);
@@ -159,7 +172,7 @@ assert(weather.led(PLAY), 'Moon mode plays without weather');
 assert(weather.advance(2200), 'Moon mode produces audio');
 weather.tap(HOME);
 const detailsFrame=weather.frame();
-assert(!weather.led(PLAY), 'leaving Moon stops weather playback');
+assert(pulses(weather,PLAY), 'leaving Moon stops weather playback'+' (available, not steady)');
 weather.tap(HOME);
 assert.notDeepEqual(weather.frame(),detailsFrame,'fourth HOME page is distinct from song details');
 const radioFrame=weather.frame();
@@ -169,9 +182,9 @@ weather.tap(PLAY);
 assert(weather.led(PLAY),'catalog song starts');
 assert(weather.advance(1800),'catalog source notes produce audio');
 weather.tap(PLAY);
-assert(!weather.led(PLAY),'catalog stops');
+assert(pulses(weather,PLAY), 'catalog stops'+' (available, not steady)');
 weather.tap(HOME);
-assert(!weather.led(PLAY),'HOME returns from library to stage');
+assert(pulses(weather,PLAY), 'HOME returns from library to stage'+' (available, not steady)');
 weather.tap(SAVE);
 assert.deepEqual(weather.store(), first, 'weather travel and playback preserve the saved arrangement');
 // Third HOME screen: real instrument presets and a track-only remix.

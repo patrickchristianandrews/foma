@@ -929,6 +929,43 @@ static int load_song_settings(const SavedSong *saved,uint32_t magic){
  for(int ch=0;ch<NC;ch++)chooseInstrument(ch,saved->session.presets[ch]);
  return 1;
 }
+/* Dim locator lighting stays on even for unavailable controls.
+ * Context-available buttons pulse at a calm 1 Hz; active modes/held
+ * controls are steady bright. No dependence on display refresh rate. */
+#define LIT(b) (1u << (b))
+static void panel_lights(uint32_t now){
+ uint32_t available=0,active=LIT(BTN_HOME);
+ if(page==WEATHER){
+  available=LIT(BTN_OCT_DOWN)|LIT(BTN_OCT_UP)|LIT(BTN_FX)|LIT(BTN_SEL)|LIT(BTN_ENV)|LIT(BTN_LFO)|LIT(BTN_PLAY);
+  if(weather.playing||playing)active|=LIT(BTN_PLAY);
+  if(ambientLevel)active|=LIT(BTN_ENV);
+  if(animalLevel)active|=LIT(BTN_LFO);
+ }else if(page==RADIO){
+  /* Native radio is not connected: don't advertise unsupported controls. */
+ }else if(page==CATALOG){
+  available=LIT(BTN_PLAY)|LIT(BTN_ARP);
+  if(catalogPlaying)active|=LIT(BTN_PLAY);
+ }else{
+  available=((1u<<BTN_COUNT)-1u)&~LIT(BTN_HOME);
+  if(playing){active|=LIT(BTN_PLAY);available&=~LIT(BTN_SAVE);}
+  if(recording)active|=LIT(BTN_REC);
+  if(page==SEQ)active|=LIT(BTN_SEQ);
+  if(page==FX)active|=LIT(BTN_FX);
+  if(page==SECTION_SOUND)active|=LIT(BTN_ENV)|LIT(BTN_LFO)|LIT(BTN_EDIT);
+  if(page==GLOBAL)active|=LIT(BTN_GLO);
+  if(p.mute&(1u<<p.sel))active|=LIT(BTN_SEL);
+  if(page!=SONG_DETAILS){
+   if(octave<=-2)available&=~LIT(BTN_OCT_DOWN);
+   if(octave>=2)available&=~LIT(BTN_OCT_UP);
+  }
+ }
+ uint32_t mask=active|((now%1000u<600u)?available:0u)|(buttons()&available);
+ led_backlight(1);
+ for(int b=0;b<BTN_COUNT;b++)led_button(b,(mask>>b)&1u);
+ uint32_t held=keys();
+ for(int k=0;k<KEY_COUNT;k++)led_key(k,(held>>k)&1u);
+}
+#undef LIT
 void setup(void){
  clear(BLACK);p.magic=LEGACY_MAGIC;p.style=0;p.sel=0;p.mute=0;generate();
  SavedMix mixed;
@@ -952,6 +989,7 @@ void setup(void){
   for(int ch=0;ch<NC;ch++)chooseInstrument(ch,preset[ch]);
  }
  for(int i=0;i<8;i++){f[i].x=8+(i%4)*55;f[i].y=128+(i%4)*5;f[i].vx=rnd(2)?1:-1;f[i].vy=rnd(2)?1:-1;f[i].ox=f[i].x;f[i].oy=f[i].y;}
+ led_backlight(1);
  bootStarted=millis();
  boot_wave(0);
 #if FOMA_BLUETOOTH
@@ -1030,8 +1068,7 @@ void loop(void){
     if(remMs>=p.bpm){remMs-=p.bpm;due++;}
    }
    if(now-lastHud>=70){lastHud=now;weather_hud(now);}
-   led_button(BTN_HOME,1);
-   led_button(BTN_PLAY,weather.playing||playing);
+   panel_lights(now);
    return;
   }
   if(weather.playing)releaseRequested=1;
@@ -1039,16 +1076,17 @@ void loop(void){
   weather.playing=0;
   weather.octHeld=0;
   page=SONG_DETAILS;
-  song_details_hud();lastHud=now;led_button(BTN_PLAY,playing);return;
+  song_details_hud();lastHud=now;panel_lights(now);return;
  }
  if(button_pressed(BTN_HOME)){
-  if(page==SONG_DETAILS){page=RADIO;radio_hud();lastHud=now;return;}
-  if(page==RADIO){if(playing){playing=0;releaseRequested=1;}page=CATALOG;catalog_hud();lastHud=now;led_button(BTN_PLAY,0);return;}
+  if(page==SONG_DETAILS){page=RADIO;radio_hud();lastHud=now;panel_lights(now);return;}
+  if(page==RADIO){if(playing){playing=0;releaseRequested=1;}page=CATALOG;catalog_hud();lastHud=now;panel_lights(now);return;}
   if(page==CATALOG)catalog_stop();
   if(page==HOME&&!skippedBoot){
    page=WEATHER;
    weather_hud(now);
    lastHud=now;
+   panel_lights(now);
    return;
   }
   page=HOME;
@@ -1066,12 +1104,12 @@ void loop(void){
   if(button_pressed(BTN_PLAY)){if(catalogPlaying)catalog_stop();else catalog_start(now);}
   catalog_playback(now);
   if(now-lastHud>=90){lastHud=now;catalog_hud();}
-  led_button(BTN_HOME,1);led_button(BTN_PLAY,catalogPlaying);return;
+  panel_lights(now);return;
  }
  if(page==RADIO){
   if(now-lastHud>=1000){lastHud=now;radio_hud();}
   int catchup=0;while(playing&&(int32_t)(now-due)>=0&&catchup++<4){transport();due+=15000/p.bpm;remMs+=15000%p.bpm;if(remMs>=p.bpm){remMs-=p.bpm;due++;}}
-  led_button(BTN_HOME,1);led_button(BTN_PLAY,playing);return;
+  panel_lights(now);return;
  }
  if(button_pressed(BTN_SEL))p.mute^=1<<p.sel;
  if(button_pressed(BTN_ENV)||button_pressed(BTN_LFO)||button_pressed(BTN_EDIT)){
@@ -1169,8 +1207,5 @@ void loop(void){
  for(int j=0;j<NC;j++)stage_splash(j,now);
  }
  if(now-lastHud>=140){lastHud=now;hud();}
- led_button(BTN_PLAY,playing);led_button(BTN_REC,recording);
- led_button(BTN_HOME,page==HOME||page==SONG_DETAILS);led_button(BTN_SEQ,page==SEQ);led_button(BTN_FX,page==FX);
- led_button(BTN_ENV,page==SECTION_SOUND);led_button(BTN_LFO,page==SECTION_SOUND);led_button(BTN_EDIT,page==SECTION_SOUND);
- led_button(BTN_GLO,page==GLOBAL);led_button(BTN_SEL,(p.mute&(1<<p.sel))!=0);
+ panel_lights(now);
 }
