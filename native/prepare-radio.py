@@ -30,10 +30,31 @@ s=s.replace("if (!net_buf || !pcm_buf) {","if (!net_buf || !pcm_buf || !lin_buf)
 s=s.replace("free(net_buf); free(pcm_buf);","free(net_buf); free(pcm_buf); free(lin_buf); lin_buf=0;")
 # Volatile playback state: shared between main loop and render.
 s=s.replace("static uint8_t radio_st;","static volatile uint8_t radio_st;")
+# MP3-only first device build: the combined application exceeds the flash slot with AAC.
+s=s.replace('#include "third_party/pvaac/pv_fm1.h"','// #include "third_party/pvaac/pv_fm1.h"')
+s=s.replace('#include "third_party/pvaac/pvmp4audiodecoder_api.h"','')
+start=s.index("static tPVMP4AudioDecoderExternal *aac_ext;")
+end=s.index("static int radio_alloc(void)",start)
+s=s[:start]+"""static void dec_drop(void){
+    free(mp3); free(pcm_tmp); mp3=0; pcm_tmp=0; dec_kind=0;
+}
+static int dec_use(uint8_t kind){
+    if(kind!=1)return -1;
+    if(dec_kind==1)return 0;
+    mp3=malloc(sizeof *mp3);
+    pcm_tmp=malloc(MINIMP3_MAX_SAMPLES_PER_FRAME*sizeof *pcm_tmp);
+    if(!mp3||!pcm_tmp){dec_drop();return -1;}
+    mp3dec_init(mp3);dec_kind=1;return 0;
+}
+"""+s[end:]
+start=s.index("        if (dec_kind == 2) {")
+end=s.index("        samples = mp3dec_decode_frame",start)
+s=s[:start]+s[end:]
+s=s.replace("        src = pcm_tmp;\n        }","        src = pcm_tmp;")
+s=s.replace("        if (dec_use(radio_mode != 2 && radio_net_aac ? 2 : 1)) {","""        if (radio_net_aac) {
+            radio_net_stop();
+            w_cpy(radio_why, "AAC not supported", sizeof radio_why);
+            radio_st=RS_ERROR; return;
+        }
+        if (dec_use(1)) {""")
 (dest/"radio_core.c").write_text(s)
-
-# C99 inline functions need internal linkage in each decoder translation unit.
-header=dest/"third_party/pvaac/getbits.h"
-s=header.read_text()
-s=s.replace("__inline UInt", "static __inline UInt")
-header.write_text(s)
