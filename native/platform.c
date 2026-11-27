@@ -56,6 +56,7 @@ extern void lw_wifi_autostart(void);
 extern int liquid_boot_complete(void);
 extern void lw_radio_mix(int32_t *,uint32_t,uint32_t);
 extern void lw_ocean_peak(unsigned);
+extern int lw_offworld_render(int32_t *,uint32_t,uint32_t);
 void lw_native_init(void){setup();}
 void lw_native_step(void){
  uint32_t raw=plat_buttons(),b=0,k=plat_keys();
@@ -72,6 +73,7 @@ void lw_native_step(void){
 void lw_native_render(int32_t *lr,uint32_t n,uint32_t gain){
  for(uint32_t i=0;i<n*2u;i++)lr[i]=0;
  if(muted)return;
+ if(lw_offworld_render(lr,n,gain))return;
  audio(lr,n);
  if(gain>4096u)gain=4096u;
  for(uint32_t i=0;i<n*2u;i++){
