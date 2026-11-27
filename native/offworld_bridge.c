@@ -25,6 +25,9 @@ static uint32_t latched;
 static uint32_t event_at,event_next,event_count;
 static int event_kind,event_x,event_origin;
 static unsigned event_phase_mask;
+static int event_earned;
+static uint32_t success_until,success_count;
+static int success_active(uint32_t now){return success_until&&(int32_t)(success_until-now)>0;}
 #define EVENT_MS 5200u
 #define APPROACH_MS 1100u
 #define LIFT_MS 3900u
@@ -46,7 +49,7 @@ static void film_cut(uint32_t now,int next){
  event_reset(now);eng_world(scene,world_level/100.0f);
 }
 static void film_auto(uint32_t now){
- if(!auto_cut||event_kind||(int32_t)(now-cut_due)<0)return;
+ if(!auto_cut||event_kind||success_active(now)||(int32_t)(now-cut_due)<0)return;
  /* Random order without repeats until all eight worlds have been visited. */
  unsigned choices=(~seen_worlds)&((1u<<NWORLD)-1u);
  if(!choices){seen_worlds=1u<<scene;choices=(~seen_worlds)&((1u<<NWORLD)-1u);}
@@ -54,11 +57,11 @@ static void film_auto(uint32_t now){
  int next=(int)(film_seed%NWORLD);
  for(int i=0;i<NWORLD;i++,next=(next+1)%NWORLD)if(choices&(1u<<next)){film_cut(now,next);break;}
 }
-static void event_reset(uint32_t now){event_kind=0;event_at=now;event_phase_mask=0;event_next=now+6000u+world_hash(now+scene)%7000u;}
+static void event_reset(uint32_t now){event_kind=0;event_earned=0;success_until=0;event_at=now;event_phase_mask=0;event_next=now+6000u+world_hash(now+scene)%7000u;}
 static void event_start(uint32_t now,int key){
- if(event_kind)return;
- /* First note in each world triggers its signature event. Subsequent notes
-  * can trigger another encounter after the current animation completes. */
+ if(event_kind||success_active(now))return;
+ event_earned=0;
+ /* Free-play events are independent of learning; guided rewards are earned. */
  event_at=now;event_phase_mask=0;event_kind=1+scene;event_origin=ship_x(now);event_x=45+(int)(world_hash(now+(unsigned)key*37u)%150u);event_count++;
  event_next=now+EVENT_MS+6000u+world_hash(now+event_count)%7000u;
  /* Use the pinned engine's existing, queued environmental effects. */
@@ -69,6 +72,9 @@ static void event_start(uint32_t now,int key){
   else if(scene==6||scene==3)eng_sfx(SFX_ZAP,0.0f,0.0f);
   else eng_sfx(SFX_CLINK,0.0f,0.0f);
  }
+}
+static void earned_event(uint32_t now){
+ event_start(now,scene);if(event_kind)event_earned=1;
 }
 /* Eight short interactive music lessons. Pitch classes follow MIDI C=0.
  * Physical keyboard input is evaluated, never synthetic EPIC harmonies. */
@@ -113,7 +119,7 @@ static void backing_tick(uint32_t now){
  /* A completed chord goes dark, including while its last key is held.
   * After a short musical break, start the next chord. The final chord
   * stays dark until a new world, track, or explicit learning restart. */
- if(guide_active()&&!guide_done&&guide_step>=3&&now-backing_flash>=1200u&&!keys()){
+ if(guide_active()&&!guide_done&&guide_step>=3&&!event_kind&&!success_active(now)&&!keys()){
   if(guide_chord==3)guide_done=1;
   else {guide_step=0;guide_chord++;guide_feedback=0;part=0;}
  }
@@ -135,7 +141,7 @@ static void backing_tick(uint32_t now){
 static void backing_play(uint32_t now,int midi){
  if(!guide_active()||guide_done||guide_step>=3)return;
  guide_played=midi%12;guide_expected=guide_pitch();backing_flash=now;
- if(guide_played==guide_expected){guide_feedback=1;guide_step++;backing_hits++;}
+ if(guide_played==guide_expected){guide_feedback=1;guide_step++;backing_hits++;if(guide_step==3)earned_event(now);}
  else {guide_feedback=-1;guide_errors++;}
 }
 static void backing_cycle(uint32_t now){backing_style=(backing_style+1)%5;backing_restart(now);}
@@ -174,14 +180,14 @@ static void lesson_correct(uint32_t now){
  lesson_step++;lesson_release=1;lesson_chord_pos=0;
  if(lesson_step>=lesson_lengths[scene]){
   lesson_wait=1;lesson_done|=1u<<scene;
-  event_start(now,scene);
+  earned_event(now);
  }
 }
 static void lesson_wrong(uint32_t now){lesson_feedback=-1;lesson_feedback_at=now;lesson_streak=0;lesson_release=1;lesson_chord_pos=0;lesson_errors++;}
 static void lesson_input(uint32_t now,uint32_t pressed){
  if(!lesson)return;
  if(lesson_wait){
-  if(!event_kind){
+  if(!event_kind&&!success_active(now)){
    if(lesson_done==255u){lesson_wait=2;return;}
    film_cut(now,(scene+1)%NWORLD);lesson_reset_step();backing_restart(now);
   }
@@ -221,7 +227,7 @@ void lw_offworld_enter(void){
  lw_offworld_echo_suspend();
  if(!lw_offworld_alloc()){init_error=2;lw_offworld_echo_resume();return;}
  octave=drone=epic=memory=scene=tone=0;vib=38;latched=0;
- select_preset(0);event_count=0;world_page=0;world_level=25;logs_on=1;auto_cut=1;idle_events=1;
+ select_preset(0);event_count=0;success_count=0;world_page=0;world_level=25;logs_on=1;auto_cut=1;idle_events=1;
  lesson=0;learn_on=1;lesson_reset_step();lesson_score=lesson_done=0;lesson_streak=0;
  backing_style=1;backing_running=0;backing_notes=backing_hits=0;backing_flash=0;backing_root=9;backing_minor=1;guide_errors=lesson_errors=0;
  uint32_t now=millis();backing_restart(now);cut_count=0;film_seed=world_hash(now+123u);seen_worlds=1u;cut_at=now-400u;cut_due=now+18000u+film_seed%17000u;
@@ -254,8 +260,11 @@ void lw_offworld_input(void){
  if(!lesson&&button_pressed(BTN_FX))world_page=!world_page;
  if(world_page&&button_pressed(BTN_SEL))film_cut(now,(scene+1)%NWORLD);
  if(world_page&&button_pressed(BTN_GLO)){auto_cut=!auto_cut;cut_due=now+18000u+film_seed%17000u;}
- if(event_kind&&now-event_at>=EVENT_MS&&((event_phase_mask&15u)==15u||now-event_at>=EVENT_MS+1800u))event_kind=0;
- if(!lesson)film_auto(now);
+ if(event_kind&&now-event_at>=EVENT_MS&&((event_phase_mask&15u)==15u||now-event_at>=EVENT_MS+1800u)){
+  if(event_earned&&(event_phase_mask&15u)==15u){success_until=now+1600u;success_count++;}
+  event_kind=0;event_earned=0;
+ }
+ if(!lesson&&(!guide_active()||guide_done||(!guide_step&&!guide_chord)))film_auto(now);
  int d=encoder(ENC_PRESETS);
  if(d)select_preset(preset+d);
  for(int i=0;i<4;i++)if((d=encoder(knobs[i]))){
@@ -274,13 +283,13 @@ void lw_offworld_input(void){
  if(button_pressed(BTN_REC)){memory=!memory;eng_memory(memory);}
 
 
- if(!lesson&&world_page&&button_pressed(BTN_EDIT))event_start(now,scene);
- if(!lesson&&idle_events&&!event_kind&&(int32_t)(now-event_next)>=0)event_start(now,scene);
+ if(!learn_on&&!lesson&&world_page&&button_pressed(BTN_EDIT))event_start(now,scene);
+ if(!learn_on&&!lesson&&idle_events&&!event_kind&&(int32_t)(now-event_next)>=0)event_start(now,scene);
  backing_tick(now);
  uint32_t pressed=0;
  for(int k=0;k<KEY_COUNT;k++){
   if(key_pressed(k)){
-   pressed|=1u<<k;if(!lesson)event_start(now,k);
+   pressed|=1u<<k;if(!learn_on&&!lesson)event_start(now,k);
    if(drone&&!(keys()&~(1u<<k))){eng_all_off();latched=0;}
    int p=KEY_FIRST_NOTE+k+octave*12;
    backing_play(now,p);
@@ -295,7 +304,7 @@ void lw_offworld_input(void){
   * required physical key may be on. Completed/held/wrong keys go dark.
   * Repeated notes get an off/on cycle when the key is released. */
  int next=-1;
- if(learn_on&&lesson&&!lesson_wait)next=lesson_next_pitch();
+ if(learn_on&&lesson&&!lesson_wait&&(!(scene==3||scene==6)||!lesson_release))next=lesson_next_pitch();
  else if(guide_active()&&!guide_done&&guide_step<3)next=guide_pitch();
  int guided=learn_on&&(lesson||guide_active());
  for(int k=0;k<KEY_COUNT;k++){
@@ -304,7 +313,7 @@ void lw_offworld_input(void){
  }
  uint8_t st,a,b;
  while(midi_read(&st,&a,&b)){
-  if((st&0xf0)==0x90&&b){if(!lesson)event_start(now,a);backing_play(now,a);eng_note_on(128+a,(float)a,(float)b/127.0f);}
+  if((st&0xf0)==0x90&&b){if(!learn_on&&!lesson)event_start(now,a);backing_play(now,a);eng_note_on(128+a,(float)a,(float)b/127.0f);}
   else if((st&0xf0)==0x80||((st&0xf0)==0x90&&!b))eng_note_off(128+a);
  }
 }
@@ -547,7 +556,7 @@ static void backing_guide(uint32_t now,uint16_t neon,uint16_t pink,int y){
  char cue[24];
  if(guide_feedback<0&&now-backing_flash<1400u){strcpy(cue,"WRONG: ");strcat(cue,pitch_names[guide_played]);strcat(cue," TRY ");strcat(cue,pitch_names[guide_expected]);text(5,y+16,cue,RGB(255,110,110),FONT_SMALL);}
  else if(guide_done)text(5,y+16,"SEQUENCE COMPLETE",neon,FONT_SMALL);
- else if(guide_step>=3)text(5,y+16,"CHORD COMPLETE!",neon,FONT_SMALL);
+ else if(guide_step>=3)text(5,y+16,event_kind?"ABDUCTION IN PROGRESS":"CHORD COMPLETE!",neon,FONT_SMALL);
  else {strcpy(cue,guide_feedback>0&&now-backing_flash<600u?"GOOD! NEXT: ":"PLAY: ");strcat(cue,pitch_names[guide_pitch()]);text(5,y+16,cue,neon,FONT_SMALL);}
  format_int(score,(int)backing_hits);text(235-text_width(score,FONT_SMALL),y+16,score,pink,FONT_SMALL);
 }
@@ -582,7 +591,7 @@ static void lesson_draw(uint32_t now,uint16_t neon,uint16_t pink){
  int len=lesson_lengths[scene],cell=228/len;
  for(int i=0;i<len;i++)rect(6+i*cell,173,cell-3,3,i<lesson_step?neon:RGB(40,48,64));
  if(lesson_wait==2){text(5,180,"ALL WORLDS MASTERED",WHITE,FONT_SMALL);text(5,199,"ENV: FREE PLAY",neon,FONT_SMALL);}
- else if(lesson_wait){text(5,176,"MISSION COMPLETE!",WHITE,FONT_SMALL);text(5,196,"KEYS OFF - ENCOUNTER",neon,FONT_SMALL);}
+ else if(lesson_wait){text(5,176,"SEQUENCE COMPLETE!",WHITE,FONT_SMALL);text(5,196,"KEYS OFF - ENCOUNTER",neon,FONT_SMALL);}
  else {
   int next=lesson_next_pitch();
   lesson_keyboard((lesson_pitch_mask(keys())&PC(next))?-1:next,0,neon);
@@ -618,6 +627,11 @@ void lw_offworld_draw(void){
  uint32_t now=millis();
  text(8,25,world_page?"WORLD SETTINGS":backing_style?backing_names[backing_style]:lesson?"ALIEN MUSIC QUEST":names[preset],pink,FONT_SMALL);
  alien_draw(now);
+ if(success_active(now)){
+  const char *msg="ABDUCTION SUCCESSFUL";int w=text_width(msg,FONT_SMALL);
+  rect(4,98,232,22,RGB(10,45,30));frame(4,98,232,22,RGB(110,255,165));
+  text((240-w)/2,101,msg,RGB(140,255,180),FONT_SMALL);
+ }
  text(8,140,worlds[scene],neon,FONT_SMALL);
  const char *status=auto_cut?"AUTO":"HOLD";
  if(event_kind){uint32_t age=now-event_at;int abduct=event_kind!=0;
@@ -684,6 +698,8 @@ int lw_offworld_expect(const char *name,int *v){
  else if(!strcmp(name,"offworld_lesson_chord_pos"))*v=lesson_chord_pos;
  else if(!strcmp(name,"offworld_learn_on"))*v=learn_on;
  else if(!strcmp(name,"offworld_guide_done"))*v=guide_done;
+ else if(!strcmp(name,"offworld_success"))*v=success_active(millis());
+ else if(!strcmp(name,"offworld_success_count"))*v=(int)success_count;
  else return 0;return 1;
 }
 #endif
