@@ -61,9 +61,11 @@ jobs:
           PY
       - name: Publish separately from standard firmware
         run: |
-          tag=advanced-liquid-wave-wifi-password-fix
+          tag=advanced-liquid-wave-wifi-experimental
           if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release upload "$tag" /tmp/Advanced-Liquid-Wave-WiFi-installer.zip /tmp/wifi-package/liquid-wave-wifi.fwsc --clobber
+            cp /tmp/Advanced-Liquid-Wave-WiFi-installer.zip /tmp/Advanced-Liquid-Wave-WiFi-password-fix-installer.zip
+            cp /tmp/wifi-package/liquid-wave-wifi.fwsc /tmp/liquid-wave-wifi-password-fix.fwsc
+            gh release upload "$tag" /tmp/Advanced-Liquid-Wave-WiFi-password-fix-installer.zip /tmp/liquid-wave-wifi-password-fix.fwsc --repo "$GITHUB_REPOSITORY" --clobber
           else
             gh release create "$tag" /tmp/Advanced-Liquid-Wave-WiFi-installer.zip /tmp/wifi-package/liquid-wave-wifi.fwsc --target a7e68953c7455d844b833c8a4808c6c50036840f --prerelease --title "Advanced Liquid Wave Wi-Fi + Radio (experimental)" --notes "Exact successful hardware build 45934916130. Password picker corrected: K1 changes character group, SELECT chooses character, SEL adds it. Native Wi-Fi and MP3 radio; Bluetooth, Frodhes and AAC excluded. Physical hardware unverified. Separate edition; standard firmware unchanged."
           fi
