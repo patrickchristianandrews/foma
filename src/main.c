@@ -757,8 +757,21 @@ static void faceDraw(int i){
  }
  a->ox=a->x;a->oy=a->y;
 }
+static int stage_singing(int i,uint32_t now){
+ return !(p.mute&(1<<i))&&(playing||(int32_t)(active[i]-now)>0);
+}
 static void swimmer_step(int i,uint32_t now){
  Face *a=&f[i];
+ if(stage_singing(i,now)){
+  int bob=sine(now*260000u+(uint32_t)i*536870912u)>>14;
+  /* Singing performers stay entirely above the highest local wave. */
+  a->y=surface_at(a->x+12,now)-25+bob;
+  if(now/170u%2u==0)a->x+=a->vx;
+  if(a->x<8){a->x=8;a->vx=1;}
+  if(a->x>208){a->x=208;a->vx=-1;}
+  swimDuration[i]=0;
+  return;
+ }
  if(!swimDuration[i]||now-swimSince[i]>=swimDuration[i]){
   unsigned next=(swimMode[i]+1+rnd(5))%6;
   swimMode[i]=(uint8_t)next;swimSince[i]=now;
@@ -786,6 +799,7 @@ static void swimmer_step(int i,uint32_t now){
  a->y+=clamp(target-a->y,-3,3);
 }
 static void stage_splash(int i,uint32_t now){
+ if(stage_singing(i,now))return;
  Face *a=&f[i];int cx=a->x+12,water=surface_at(cx,now);
  uint32_t age=now-swimSince[i];unsigned t=(age/80u)%10u;
  int mode=swimMode[i],cross=a->y+9-water;
