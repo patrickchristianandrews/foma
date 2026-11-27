@@ -55,6 +55,12 @@ tap PLAY
 expect loop_playing 0
 tap HOME
 expect loop_page 0
+expect ocean_page 1
+tap PLAY
+wait 400
+tap PLAY
+tap HOME
+expect ocean_page 0
 tap HOME
 expect room_patch 9
 turn ALGO 1
