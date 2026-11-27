@@ -34,3 +34,24 @@ expect radio_buffers 0
 tap HOME
 expect radio_active 0
 expect radio_buffers 0
+tap HOME
+expect loop_page 1
+expect loop_track 0
+expect loop_length 16
+expect loop_steps 10
+tap EDIT
+expect loop_steps 0
+tap REC
+expect loop_steps 10
+turn SELECT 1
+expect loop_track 1
+expect loop_steps 0
+tap ARP
+expect loop_steps 4
+tap PLAY
+wait 600
+expect loop_playing 1
+tap PLAY
+expect loop_playing 0
+tap HOME
+expect loop_page 0
