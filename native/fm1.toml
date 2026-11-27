@@ -8,7 +8,7 @@ ble = false
 usb_audio_in = false
 usb_audio_out = false
 include = ["../platform", "../src"]
-o2 = ["platform.c", "graphics.c", "../src/main.c", "../src/liquid_song.c", "../src/weather.c", "../src/weather_parse.c"]
+o2 = ["platform.c", "graphics.c", "wifi_ui.c", "../src/main.c", "../src/liquid_song.c", "../src/weather.c", "../src/weather_parse.c"]
 o2_cflags = ["-DFOMA_BLUETOOTH=0", "-DFOMA_USB_AUDIO=0", "-DFOMA_TRS_MIDI=0", "-DFOMA_MIDI_CLOCK=0", "-DFOMA_NATIVE_WIFI=1"]
 words = "words.tsv"
 repo = "https://github.com/patrickchristianandrews/foma"
