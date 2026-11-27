@@ -589,10 +589,18 @@ static void weather_hud(uint32_t now){
 #else
  int bob=(int32_t)(active[7]-now)>0 && !(p.mute&(1<<7))?2:0;
 #endif
+#ifdef TIDBIT_ROOM_SPANS
+ unsigned sprite_pos=0;
+ for(int y=0;y<80;y++)for(int j=0;j<tidbitRoomSpan[y][1];j++){
+  uint16_t c=tidbitRoomPortrait[sprite_pos++];
+  if(c)pixel(96+tidbitRoomSpan[y][0]+j,70+y-bob,c);
+ }
+#else
  for(int y=0;y<80;y++)for(int x=0;x<80;x++){
   uint16_t c=tidbitRoomPortrait[y*80+x];
   if(c)pixel(96+x,70+y-bob,c);
  }
+#endif
 #else
  for(int y=0;y<18;y++)for(int x=0;x<24;x++){
   uint16_t c=tidbitPortrait[y*24+x];
