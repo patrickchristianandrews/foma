@@ -627,7 +627,10 @@ static void stage_plane(uint32_t now){
 }
 static void boot_wave(uint32_t elapsed) {
  static int previous=-1;
- if (previous<0) text(32,72,"LIQUID WAVE",RGB(190,120,255),FONT_BIG);
+ if (previous<0) {
+  text(32,72,"LIQUID WAVE",RGB(190,120,255),FONT_BIG);
+  text(64,108,"ADVANCED BETA 2",WHITE,FONT_SMALL);
+ }
  int front=(int)(elapsed*300u/780u);
  if(front==previous)return;
  for(int x=0;x<SCREEN_W;x+=3){
@@ -910,7 +913,7 @@ static void hud(void){
  }
 
  rect(0,0,240,48,BLACK);text(0,0,"LIQUID WAVE",RGB(190,120,255),FONT_SMALL);text(125,0,pageName[page],WHITE,FONT_SMALL);battery_hud();
- text(0,16,liquid_song_style_name(p.style),WHITE,FONT_SMALL);char b[12];format_int(b,p.bpm);text(112,16,b,WHITE,FONT_SMALL);
+ text(0,16,liquid_song_style_name(p.style),WHITE,FONT_SMALL);char b[12];format_int(b,p.bpm);text(112,16,b,WHITE,FONT_SMALL);if(page==HOME)text(168,16,"BETA 2",RGB(190,120,255),FONT_SMALL);
  const char *guide=page==SECTION_SOUND?"K1 SECTION / K2 PARAM":
   page==SEQ?"SEL TRACK / ALGO SOUND":page==FX?"K2 PARAM / K3 VALUE":page==ENV?"K2 ATTACK / K4 TAIL":page==MOTION?"K2 RATE / K3 DEPTH":(page==EDIT||page==HOME||page==MIX)?"SELECT / ALGO SOUND":!p.sel&&page!=GLOBAL&&page!=SEQ?"TEMPO  LEVEL DRIVE TAIL":knobGuide[page];
  text(0,32,guide,WHITE,FONT_SMALL);
