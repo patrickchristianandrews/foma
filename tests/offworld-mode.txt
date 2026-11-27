@@ -324,6 +324,9 @@ expect offworld_lesson_wait 2
 expect offworld_lesson_score 450
 tap ENV
 expect offworld_lesson 0
+expect offworld_learn_on 0
+expect offworld_backing 1
+expect native_key_lights 0
 tap HOME
 expect offworld_active 0
 
@@ -357,6 +360,17 @@ expect offworld_backing_hits 3
 wait 700
 expect offworld_guide_step 0
 expect native_key_lights 4096
+tap SAVE
+expect offworld_learn_on 0
+expect offworld_backing 1
+expect native_key_lights 0
+expect offworld_event 1
+tapkey 0
+expect offworld_guide_errors 1
+expect native_key_lights 0
+tap SAVE
+expect offworld_learn_on 1
+expect offworld_backing 1
 tap LFO
 expect offworld_backing 2
 wait 800
