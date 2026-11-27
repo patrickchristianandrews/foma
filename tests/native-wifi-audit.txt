@@ -1,8 +1,12 @@
-wait 1000
+wait 3500
+expect wifi_state 5
+tap HOME
+tap HOME
+tap HOME
+tap GLO
 expect wifi_state 0
-tap HOME
-tap HOME
-tap HOME
+wait 300
+expect wifi_state 0
 tap GLO
 wait 2500
 expect wifi_state 5
