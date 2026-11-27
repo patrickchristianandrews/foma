@@ -159,3 +159,159 @@ wait 42000
 expect offworld_cuts >0
 tap HOME
 expect offworld_active 0
+
+# Music Quest: actual keyboard pitches, wrong note, all eight missions, rhythm, triads and escape.
+tap HOME
+tap HOME
+tap HOME
+tap HOME
+tap HOME
+tap HOME
+expect offworld_active 1
+tap ENV
+expect offworld_lesson 1
+expect offworld_scene 0
+tapkey 0
+expect offworld_lesson_step 0
+tapkey 7
+tapkey 9
+tapkey 11
+tapkey 14
+expect offworld_lesson_step 4
+expect offworld_lesson_done 1
+expect offworld_lesson_wait 1
+wait 5600
+expect offworld_scene 1
+expect offworld_lesson_step 0
+tapkey 7
+tapkey 9
+tapkey 11
+tapkey 12
+tapkey 14
+tapkey 16
+tapkey 18
+tapkey 19
+expect offworld_lesson_step 8
+expect offworld_lesson_done 3
+expect offworld_lesson_wait 1
+wait 5600
+expect offworld_scene 2
+expect offworld_lesson_step 0
+tapkey 16
+tapkey 18
+tapkey 19
+tapkey 21
+tapkey 23
+tapkey 24
+tapkey 26
+tapkey 16
+expect offworld_lesson_step 8
+expect offworld_lesson_done 7
+expect offworld_lesson_wait 1
+wait 5600
+expect offworld_scene 3
+expect offworld_lesson_step 0
+key 7 down
+key 11 down
+key 14 down
+key 7 up
+key 11 up
+key 14 up
+wait 50
+key 12 down
+key 16 down
+key 19 down
+key 12 up
+key 16 up
+key 19 up
+wait 50
+key 14 down
+key 18 down
+key 21 down
+key 14 up
+key 18 up
+key 21 up
+wait 50
+expect offworld_lesson_step 3
+expect offworld_lesson_done 15
+expect offworld_lesson_wait 1
+wait 5600
+expect offworld_scene 4
+expect offworld_lesson_step 0
+tapkey 7
+wait 520
+tapkey 7
+wait 520
+tapkey 7
+wait 520
+tapkey 7
+expect offworld_lesson_step 4
+expect offworld_lesson_done 31
+expect offworld_lesson_wait 1
+wait 5600
+expect offworld_scene 5
+expect offworld_lesson_step 0
+tapkey 7
+tapkey 14
+tapkey 9
+tapkey 16
+tapkey 11
+tapkey 18
+expect offworld_lesson_step 6
+expect offworld_lesson_done 63
+expect offworld_lesson_wait 1
+wait 5600
+expect offworld_scene 6
+expect offworld_lesson_step 0
+key 16 down
+key 19 down
+key 23 down
+key 16 up
+key 19 up
+key 23 up
+wait 50
+key 12 down
+key 16 down
+key 19 down
+key 12 up
+key 16 up
+key 19 up
+wait 50
+key 7 down
+key 11 down
+key 14 down
+key 7 up
+key 11 up
+key 14 up
+wait 50
+key 14 down
+key 18 down
+key 21 down
+key 14 up
+key 18 up
+key 21 up
+wait 50
+expect offworld_lesson_step 4
+expect offworld_lesson_done 127
+expect offworld_lesson_wait 1
+wait 5600
+expect offworld_scene 7
+expect offworld_lesson_step 0
+tapkey 7
+tapkey 7
+tapkey 14
+tapkey 14
+tapkey 16
+tapkey 16
+tapkey 14
+tapkey 11
+expect offworld_lesson_step 8
+expect offworld_lesson_done 255
+expect offworld_lesson_wait 1
+wait 5600
+expect offworld_lesson_wait 2
+expect offworld_lesson_score 450
+tap ENV
+expect offworld_lesson 0
+tap HOME
+expect offworld_active 0
