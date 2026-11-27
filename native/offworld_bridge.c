@@ -79,36 +79,53 @@ void lw_offworld_input(void){
   else if((st&0xf0)==0x80||((st&0xf0)==0x90&&!b))eng_note_off(128+a);
  }
 }
-/* Procedural city film: no bitmap assets, no additional framebuffer. */
-static unsigned city_hash(unsigned n){n^=n>>16;n*=0x7feb352du;n^=n>>15;return n;}
-static void city_draw(uint32_t now){
- static const uint16_t sky[]={RGB(20,12,48),RGB(42,13,40),RGB(9,26,49),RGB(11,38,45),RGB(46,20,15),RGB(25,15,40),RGB(34,10,46),RGB(10,28,45)};
- static const uint16_t glow[]={RGB(80,220,255),RGB(255,140,60),RGB(120,160,255),RGB(70,255,185),RGB(255,115,45),RGB(200,120,255),RGB(255,75,180),RGB(130,210,255)};
- uint16_t ink=glow[scene];
- int pulse=(int)(eng_level()*40.0f);
- uint32_t shift=now/220u;
- rect(4,46,232,102,sky[scene]);frame(3,45,234,104,ink);
- for(int i=0;i<13;i++){
-  unsigned h=city_hash((unsigned)(i+scene*29+7));
-  int x=5+i*18-(int)(shift%18u),height=17+(int)(h%54u);
-  int y=126-height;rect(x,y,16,height,RGB(8,12,25));
-  line(x,y,x+15,y,RGB(49,53,75));
-  for(int j=0;j<height/8;j++)for(int k=0;k<2;k++)
-   if(((h>>(j%17))+j+k+(latched?pulse/2:0))%4u!=0)
-    rect(x+3+k*7,y+4+j*8,3,3,(latched&&((j+k)%3==0))?ink:RGB(123,96,79));
+/* Alien horizons: procedural primitives only, no additional heap or assets. */
+static unsigned world_hash(unsigned n){n^=n>>16;n*=0x7feb352du;n^=n>>15;return n;}
+static const char *const worlds[NWORLD]={"RING WORLD","SPORE FOREST","VOID NEBULA","CRYSTAL SEA","LAVA MOON","SIGNAL PLANET","ALIEN RUINS","ICE ORBIT"};
+static void orb(int x,int y,int r,uint16_t color){
+ int d=0;
+ for(int j=r;j>=0;j--){
+  while(d<r && (d+1)*(d+1)+j*j<=r*r)d++;
+  rect(x-d,y-j,2*d+1,1,color);
+  if(j)rect(x-d,y+j,2*d+1,1,color);
  }
- rect(4,126,232,20,RGB(13,17,35));
- for(int i=0;i<12;i++){int x=6+i*20;line(x,128,x+(i%2?4:-4),144,RGB(44,51,75));}
- int car=8+(int)((now/19u)%205u);int cy=65+scene%3*15;
- rect(car,cy,19,4,RGB(185,192,217));rect(car+5,cy-2,9,2,ink);
- line(car-8,cy+3,car+1,cy+3,ink);
- for(int i=0;i<macros[3]/4;i++){
-  unsigned a=city_hash((unsigned)i+scene*91u);
-  int x=7+(int)((a+(now/38u)*3u)%220u);
-  int y=49+(int)(((a>>8)+now/11u)%90u);
-  line(x,y,x-2,y+5,RGB(86,120,155));
+}
+static void alien_draw(uint32_t now){
+ static const uint16_t sky[NWORLD]={RGB(12,14,48),RGB(12,42,25),RGB(30,9,48),RGB(6,32,55),RGB(52,14,10),RGB(15,22,43),RGB(34,11,36),RGB(10,28,50)};
+ static const uint16_t glow[NWORLD]={RGB(80,220,255),RGB(100,255,120),RGB(230,120,255),RGB(70,255,210),RGB(255,140,60),RGB(210,235,100),RGB(255,100,200),RGB(150,220,255)};
+ uint16_t ink=glow[scene],dark=RGB(12,18,30);
+ int pulse=bound((int)(eng_level()*30.0f),0,30);
+ rect(4,46,232,91,sky[scene]);frame(3,45,234,93,ink);
+ for(int i=0;i<24;i++){
+  unsigned h=world_hash((unsigned)(i+scene*31+7));
+  int x=8+(int)(h%222u),y=50+(int)((h>>12)%45u);
+  pixel(x,y,((now/300u+i)%5u==0)?ink:RGB(150,160,190));
  }
- if(macros[3]>95&&now%6300u<90u)line(180,48,165,76,WHITE);
+ int px=177,py=76;
+ orb(px,py,19,ink);orb(px+5,py-5,14,sky[scene]);
+ if(scene==0||scene==7){
+  line(px-30,py+9,px+30,py-9,ink);
+  line(px-27,py+12,px+28,py-5,RGB(190,180,220));
+ }
+ rect(4,112,232,25,dark);
+ for(int i=0;i<9;i++){
+  unsigned h=world_hash((unsigned)(i+scene*19+13));
+  int x=10+i*26,ht=10+(int)(h%22u),y=117-ht;
+  if(scene==1){rect(x, y+6,3,ht,ink);orb(x+1,y+3,6,ink);orb(x+1,y+1,3,sky[scene]);}
+  else if(scene==3||scene==6){line(x-5,124,x+4,y,ink);line(x+4,y,x+12,124,ink);line(x+4,y,x+4,124,RGB(100,140,170));}
+  else {line(x-7,122,x+3,y,ink);line(x+3,y,x+13,122,ink);line(x-7,122,x+13,122,RGB(60,90,120));}
+ }
+ /* A drifting alien vessel and a note-reactive tractor beam. */
+ int ship=16+(int)((now/55u)%141u),sy=77+(int)((now/600u)%3u);
+ rect(ship-9,sy,19,3,ink);rect(ship-5,sy-3,11,3,RGB(185,220,220));
+ rect(ship-5,sy+3,11,2,ink);
+ if(latched||pulse>3){line(ship-4,sy+5,ship-11,110,ink);line(ship+4,sy+5,ship+11,110,ink);}
+ for(int i=0;i<7;i++){
+  int x=12+i*32;
+  int h=2+(pulse*(1+(int)((i+now/120u)%4u)))/8;
+  if(h>15)h=15;
+  rect(x,134-h,18,h,ink);
+ }
 }
 void lw_offworld_draw(void){
  uint16_t neon=RGB(70,220,255),pink=RGB(255,90,180);
@@ -119,25 +136,32 @@ void lw_offworld_draw(void){
   else text(8,65,"INITIALIZING",pink,FONT_SMALL);
   text(8,212,"PLAY RETRY / HOME EXIT",WHITE,FONT_SMALL);return;
  }
- static const char *const names[]={"MIDNIGHT BRASS","NEON TOWER","PYRAMID HALL","LAST SUNRISE","SKYLINE","DEEP SECTOR","ACID SKY"};
- text(8,30,names[preset],pink,FONT_SMALL);
- city_draw(millis());
+ static const char *const names[NPRESETS]={"ALIEN BRASS","STAR CALL","ORBIT PAD","COSMIC DAWN","GRAVITY BASS","VOID DRONE","ACID SIGNAL"};
+ static const char *const labels[4]={"K1 SWELL","K2 DRIFT","K3 SPACE","K4 RAIN"};
+ text(8,28,names[preset],pink,FONT_SMALL);
+ alien_draw(millis());
+ text(8,140,worlds[scene],neon,FONT_SMALL);
+ text(150,140,"FX: WORLD",WHITE,FONT_SMALL);
  for(int i=0;i<4;i++){
   int x=5+i*59;char val[12];format_int(val,macros[i]);
-  text(x,152,MACROS[i].name,WHITE,FONT_SMALL);
-  rect(x,170,52,5,RGB(25,32,48));rect(x,170,52*macros[i]/127,5,neon);
-  text(x,178,val,neon,FONT_SMALL);
+  text(x,156,labels[i],WHITE,FONT_SMALL);
+  rect(x,170,52,5,RGB(40,48,64));rect(x,170,52*macros[i]/127,5,neon);
+  text(x,177,val,neon,FONT_SMALL);
  }
- text(5,197,drone?"DRN ON":"DRN OFF",pink,FONT_SMALL);
- text(80,197,epic?"EPIC ON":"EPIC OFF",pink,FONT_SMALL);
- text(160,197,memory?"MEM ON":"MEM OFF",pink,FONT_SMALL);
- text(5,218,"FX CITY / HOME EXIT",WHITE,FONT_SMALL);
+ text(5,194,drone?"PLAY HOLD:ON":"PLAY HOLD:OFF",drone?neon:WHITE,FONT_SMALL);
+ text(125,194,epic?"ARP CHORD:ON":"ARP CHORD:OFF",epic?neon:WHITE,FONT_SMALL);
+ text(5,207,memory?"REC FREEZE:ON":"REC FREEZE:OFF",memory?neon:WHITE,FONT_SMALL);
+ text(125,207,"PRESET: SOUND",WHITE,FONT_SMALL);
+ text(5,221,"SEL TONE / ALG VIB / HOME NEXT",WHITE,FONT_SMALL);
 }
 #ifdef PLAT_HOST
 int lw_offworld_expect(const char *name,int *v){
  if(!strcmp(name,"offworld_active"))*v=mode==2;
  else if(!strcmp(name,"offworld_notes"))*v=mode==2?(int)eng_notes():0;
  else if(!strcmp(name,"offworld_error"))*v=init_error;
+ else if(!strcmp(name,"offworld_scene"))*v=scene;
+ else if(!strcmp(name,"offworld_preset"))*v=preset;
+ else if(!strcmp(name,"offworld_drone"))*v=drone;
  else return 0;return 1;
 }
 #endif
