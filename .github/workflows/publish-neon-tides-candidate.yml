@@ -1,0 +1,59 @@
+name: Publish Neon Tides test installer
+on:
+  push:
+    branches: [liquid-wave-offworld-development]
+    paths: ['.github/workflows/publish-neon-tides-candidate.yml']
+  workflow_dispatch:
+permissions:
+  actions: read
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+      CANDIDATE_RUN: '45985800431'
+      CANDIDATE_SHA: '3ed0837945eac3a74a41d38295c16c39a45b1dd5'
+    steps:
+      - name: Require exact audited candidate and all checks
+        run: |
+          set -euo pipefail
+          test "$(gh run view "$CANDIDATE_RUN" --repo "$GITHUB_REPOSITORY" --json headSha --jq .headSha)" = "$CANDIDATE_SHA"
+          timeout 900 gh run watch "$CANDIDATE_RUN" --repo "$GITHUB_REPOSITORY" --exit-status --interval 15
+          test "$(gh run view "$CANDIDATE_RUN" --repo "$GITHUB_REPOSITORY" --json conclusion --jq .conclusion)" = success
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$CANDIDATE_RUN/artifacts" > /tmp/artifacts.json
+          python3 - <<'PY'
+          import json,pathlib,re,os
+          a=[x for x in json.loads(pathlib.Path('/tmp/artifacts.json').read_text())['artifacts'] if x['name']=='liquid-wave-neon-tides-test-candidate' and not x['expired']]
+          assert len(a)==1 and a[0]['workflow_run']['head_sha']==os.environ['CANDIDATE_SHA']
+          digest=a[0]['digest']
+          assert re.fullmatch(r'sha256:[0-9a-f]{64}',digest)
+          pathlib.Path('/tmp/artifact-id').write_text(str(int(a[0]['id'])))
+          pathlib.Path('/tmp/artifact.sha256').write_text(digest[7:]+'  /tmp/candidate.zip\n')
+          PY
+          curl -fsSL -H "Authorization: Bearer $GH_TOKEN" "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/artifacts/$(cat /tmp/artifact-id)/zip" -o /tmp/candidate.zip
+          sha256sum -c /tmp/artifact.sha256
+          unzip -q /tmp/candidate.zip -d /tmp/candidate
+      - name: Validate package and publish separate experimental asset
+        run: |
+          set -euo pipefail
+          cd /tmp/candidate
+          python3 - <<'PY'
+          import hashlib,json,os,pathlib,zipfile
+          with zipfile.ZipFile('Advanced-Liquid-Wave-Neon-Tides-test-installer.zip') as z:
+              raw=z.read('firmware.fwsc')
+              meta=json.loads(z.read('release.json'))
+              sha=hashlib.sha256(raw).hexdigest()
+              assert meta['revision']==os.environ['CANDIDATE_SHA']
+              assert meta['device_run']==os.environ['CANDIDATE_RUN']
+              assert meta['hardware_tested'] is False and meta['product']=='FM-1_9700'
+              assert len(raw)==611496 and b'FELUCCA-LOADER-1' in raw
+              assert meta['firmware_sha256']==sha and sha in z.read('index.html').decode()
+              assert 'Hardware-test candidate only.' in z.read('index.html').decode()
+              pathlib.Path('liquid-wave-neon-tides-test.fwsc').write_bytes(raw)
+              pathlib.Path('neon-tides-test-release.json').write_text(json.dumps(meta,indent=2))
+              print('Verified candidate:',sha)
+          PY
+          # Never replace the previously published Wi-Fi or standard assets.
+          gh release upload advanced-liquid-wave-wifi-experimental Advanced-Liquid-Wave-Neon-Tides-test-installer.zip liquid-wave-neon-tides-test.fwsc neon-tides-test-release.json --repo "$GITHUB_REPOSITORY"
