@@ -67,7 +67,12 @@ static uint8_t lfoRate[8]={4,4,4,4,4,4,4,4};
 static uint8_t attackMs[8];
 static volatile uint8_t fxDelay,fxReverb,fxChorus,fxFilter;
 static int fxParameter;
+#if defined(FOMA_NATIVE_WIFI) && FOMA_NATIVE_WIFI
+extern void *malloc(unsigned long);
+static int16_t *echoL,*echoR;
+#else
 static int16_t echoL[4096],echoR[4096];
+#endif
 static unsigned echoPos;
 static int32_t filterL,filterR;
 static int wrap(int value,int count);
@@ -246,7 +251,7 @@ void audio(int32_t *out,uint32_t frames){
  int32_t dryL=output_limit(sum+left),dryR=output_limit(sum+right);
  if(fxFilter){int shift=1+fxFilter/16;filterL+=(dryL-filterL)>>shift;filterR+=(dryR-filterR)>>shift;dryL=filterL;dryR=filterR;}
  else {filterL=dryL;filterR=dryR;}
- if(fxDelay||fxReverb||fxChorus){
+ if(echoL&&echoR&&(fxDelay||fxReverb||fxChorus)){
   unsigned mod=(unsigned)((sine((uint32_t)echoPos*1048576u)+32768)>>10);
   unsigned shortTap=(echoPos+4096u-700u-mod)&4095u;
   unsigned roomTap=(echoPos+4096u-1700u)&4095u;
@@ -255,7 +260,7 @@ void audio(int32_t *out,uint32_t frames){
   echoL[echoPos]=(int16_t)clamp(dryL+wetL/3,-24000,24000);
   echoR[echoPos]=(int16_t)clamp(dryR+wetR/3,-24000,24000);
   dryL+=wetL;dryR+=wetR;
- }else {echoL[echoPos]=0;echoR[echoPos]=0;}
+ }else if(echoL&&echoR){echoL[echoPos]=0;echoR[echoPos]=0;}
  echoPos=(echoPos+1)&4095u;
  int volume=masterLevel;
  out[n*2]+=output_limit(dryL*volume/100);
@@ -995,6 +1000,10 @@ static void panel_lights(uint32_t now){
 }
 #undef LIT
 void setup(void){
+#if defined(FOMA_NATIVE_WIFI) && FOMA_NATIVE_WIFI
+ echoL=malloc(4096u*sizeof *echoL);echoR=malloc(4096u*sizeof *echoR);
+ if(echoL&&echoR)for(unsigned i=0;i<4096u;i++){echoL[i]=0;echoR[i]=0;}
+#endif
  clear(BLACK);p.magic=LEGACY_MAGIC;p.style=0;p.sel=0;p.mute=0;generate();
  SavedMix mixed;
  SavedSong full;
