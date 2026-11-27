@@ -71,20 +71,54 @@ void lw_offworld_input(void){
   else if((st&0xf0)==0x80||((st&0xf0)==0x90&&!b))eng_note_off(128+a);
  }
 }
+/* Procedural city film: no bitmap assets, no additional framebuffer. */
+static unsigned city_hash(unsigned n){n^=n>>16;n*=0x7feb352du;n^=n>>15;return n;}
+static void city_draw(uint32_t now){
+ static const uint16_t sky[]={RGB(20,12,48),RGB(42,13,40),RGB(9,26,49),RGB(11,38,45),RGB(46,20,15),RGB(25,15,40),RGB(34,10,46),RGB(10,28,45)};
+ static const uint16_t glow[]={RGB(80,220,255),RGB(255,140,60),RGB(120,160,255),RGB(70,255,185),RGB(255,115,45),RGB(200,120,255),RGB(255,75,180),RGB(130,210,255)};
+ uint16_t ink=glow[scene];
+ int pulse=(int)(eng_level()*40.0f);
+ uint32_t shift=now/220u;
+ rect(4,46,232,102,sky[scene]);frame(3,45,234,104,ink);
+ for(int i=0;i<13;i++){
+  unsigned h=city_hash((unsigned)(i+scene*29+7));
+  int x=5+i*18-(int)(shift%18u),height=17+(int)(h%54u);
+  int y=126-height;rect(x,y,16,height,RGB(8,12,25));
+  line(x,y,x+15,y,RGB(49,53,75));
+  for(int j=0;j<height/8;j++)for(int k=0;k<2;k++)
+   if(((h>>(j%17))+j+k+(latched?pulse/2:0))%4u!=0)
+    rect(x+3+k*7,y+4+j*8,3,3,(latched&&((j+k)%3==0))?ink:RGB(123,96,79));
+ }
+ rect(4,126,232,20,RGB(13,17,35));
+ for(int i=0;i<12;i++){int x=6+i*20;line(x,128,x+(i%2?4:-4),144,RGB(44,51,75));}
+ int car=8+(int)((now/19u)%205u);int cy=65+scene%3*15;
+ rect(car,cy,19,4,RGB(185,192,217));rect(car+5,cy-2,9,2,ink);
+ line(car-8,cy+3,car+1,cy+3,ink);
+ for(int i=0;i<macros[3]/4;i++){
+  unsigned a=city_hash((unsigned)i+scene*91u);
+  int x=7+(int)((a+(now/38u)*3u)%220u);
+  int y=49+(int)(((a>>8)+now/11u)%90u);
+  line(x,y,x-2,y+5,RGB(86,120,155));
+ }
+ if(macros[3]>95&&now%6300u<90u)line(180,48,165,76,WHITE);
+}
 void lw_offworld_draw(void){
  uint16_t neon=RGB(70,220,255),pink=RGB(255,90,180);
- clear(BLACK);text(8,5,"7 / NIGHT DRIFT",neon,FONT_BIG);
+ clear(BLACK);text(8,3,"NIGHT DRIFT",neon,FONT_BIG);
  if(mode!=2){text(8,65,"ENGINE UNAVAILABLE",pink,FONT_SMALL);text(8,92,"MEMORY OR NETWORK BUSY",WHITE,FONT_SMALL);text(8,212,"PLAY RETRY / HOME EXIT",WHITE,FONT_SMALL);return;}
  static const char *const names[]={"MIDNIGHT BRASS","NEON TOWER","PYRAMID HALL","LAST SUNRISE","SKYLINE","DEEP SECTOR","ACID SKY"};
- text(8,36,names[preset],pink,FONT_SMALL);
+ text(8,30,names[preset],pink,FONT_SMALL);
+ city_draw(millis());
  for(int i=0;i<4;i++){
-  int y=65+i*31;char val[12];format_int(val,macros[i]);
-  text(8,y,MACROS[i].name,WHITE,FONT_SMALL);text(186,y,val,neon,FONT_SMALL);
-  rect(8,y+15,220,5,RGB(25,32,48));rect(8,y+15,220*macros[i]/127,5,neon);
+  int x=5+i*59;char val[12];format_int(val,macros[i]);
+  text(x,152,MACROS[i].name,WHITE,FONT_SMALL);
+  rect(x,170,52,5,RGB(25,32,48));rect(x,170,52*macros[i]/127,5,neon);
+  text(x,178,val,neon,FONT_SMALL);
  }
- text(8,190,drone?"DRONE ON":"DRONE OFF",pink,FONT_SMALL);
- text(122,190,epic?"EPIC ON":"EPIC OFF",pink,FONT_SMALL);
- text(8,212,"HOME EXIT / REC MEMORY",WHITE,FONT_SMALL);
+ text(5,197,drone?"DRN ON":"DRN OFF",pink,FONT_SMALL);
+ text(80,197,epic?"EPIC ON":"EPIC OFF",pink,FONT_SMALL);
+ text(160,197,memory?"MEM ON":"MEM OFF",pink,FONT_SMALL);
+ text(5,218,"FX CITY / HOME EXIT",WHITE,FONT_SMALL);
 }
 #ifdef PLAT_HOST
 int lw_offworld_expect(const char *name,int *v){
