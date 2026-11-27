@@ -104,7 +104,7 @@ static void city_draw(uint32_t now){
 }
 void lw_offworld_draw(void){
  uint16_t neon=RGB(70,220,255),pink=RGB(255,90,180);
- clear(BLACK);text(8,3,"NIGHT DRIFT",neon,FONT_BIG);
+ clear(BLACK);text(8,3,"NEON TIDES",neon,FONT_BIG);
  if(mode!=2){text(8,65,"ENGINE UNAVAILABLE",pink,FONT_SMALL);text(8,92,"MEMORY OR NETWORK BUSY",WHITE,FONT_SMALL);text(8,212,"PLAY RETRY / HOME EXIT",WHITE,FONT_SMALL);return;}
  static const char *const names[]={"MIDNIGHT BRASS","NEON TOWER","PYRAMID HALL","LAST SUNRISE","SKYLINE","DEEP SECTOR","ACID SKY"};
  text(8,30,names[preset],pink,FONT_SMALL);
