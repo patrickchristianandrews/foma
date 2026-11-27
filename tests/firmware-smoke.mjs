@@ -155,4 +155,30 @@ weather.tap(HOME);
 assert.notDeepEqual(weather.frame(),radioFrame,'HOME returns from radio to stage');
 weather.tap(SAVE);
 assert.deepEqual(weather.store(), first, 'weather travel and playback preserve the saved arrangement');
+// Third HOME screen: real instrument presets and a track-only remix.
+const lab=await device(first);
+lab.advance(850);
+lab.tap(HOME);
+lab.tap(HOME);
+lab.tap(SAVE);
+const beforeLab=lab.store();
+lab.turn(SELECT,1);
+lab.turn(1,1); // ALGORITHM
+lab.tap(SAVE);
+const afterInstrument=lab.store();
+const selected=afterInstrument[6];
+assert.notEqual(afterInstrument[648+selected],beforeLab[648+selected],'character instrument preset changes and saves on Song Lab');
+lab.turn(KNOB4,3); // CLASSIC -> TRACK
+lab.tap(ARP);
+lab.tap(SAVE);
+const remixed=lab.store();
+let changed=0;
+for(let part=0;part<5;part++)for(let ch=0;ch<8;ch++)for(let n=0;n<16;n++){
+ const index=8+(part*8+ch)*16+n;
+ if(ch===selected)changed+=Number(remixed[index]!==afterInstrument[index]);
+ else assert.equal(remixed[index],afterInstrument[index],'track remix leaves other characters unchanged');
+}
+assert(changed>0,'track remix changes selected character pattern');
+assert.equal(remixed[5],afterInstrument[5],'track remix preserves tempo');
+assert.deepEqual(remixed.slice(656,685),afterInstrument.slice(656,685),'track remix preserves harmony');
 console.log('FM-1 emulator boot, waves, Tidbit, section mixing, transport, project migration and weather-screen checks passed.');
