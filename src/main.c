@@ -1221,7 +1221,9 @@ static void lb_hud(void){
 #ifdef PLAT_HOST
 #include <string.h>
 int lw_loop_expect(const char *name,int *v){
- if(!strcmp(name,"loop_page"))*v=page==LOOP_BUILDER;
+ if(!strcmp(name,"room_patch"))*v=room_patch;
+ else if(!strcmp(name,"room_key_active"))*v=(int32_t)(room_key_until-millis())>0;
+ else if(!strcmp(name,"loop_page"))*v=page==LOOP_BUILDER;
  else if(!strcmp(name,"loop_playing"))*v=lb_playing;
  else if(!strcmp(name,"loop_track"))*v=lb_track;
  else if(!strcmp(name,"loop_length"))*v=lb_length;
