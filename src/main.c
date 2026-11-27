@@ -523,30 +523,40 @@ static void weather_hud(uint32_t now){
  rect(199,136,17,14,purple);
  line(207,136,207,116,purple);line(207,128,198,119,purple);
  line(207,124,216,113,purple);
- /* Turntable: walnut cabinet, platter, concentric grooves, rotating label
-  * and a tonearm that parks when music stops. No separate audio source. */
+ /* Compact h1-inspired turntable: thin peach line art, shallow perspective
+  * and a dark platter. Keep it on the left shelf and out of Tidbit's window.
+  * Reference: user's Rainy Night Tidbit Cozy Room.png. */
  int recordOn=weather.playing||playing;
- rect(8,155,79,45,RGB(106,58,45));
- rect(10,157,75,38,RGB(173,104,71));
- frame(8,155,79,45,peach);
- rect(10,195,75,4,RGB(55,32,40));
- for(int yy=-17;yy<=17;yy++)for(int xx=-17;xx<=17;xx++){
-  int d=xx*xx+yy*yy;
-  if(d>289)continue;
-  uint16_t c=d<=36?RGB(169,99,225):d>=256?RGB(84,88,102):d%37<12?RGB(52,50,65):RGB(23,21,31);
-  pixel(32+xx,176+yy,c);
+ uint16_t deck=RGB(37,24,36),edge=RGB(229,152,111),groove=RGB(125,78,78);
+ for(int y=170;y<192;y++){
+  int inset=(191-y)/4;
+  rect(13+inset,y,64-2*inset,1,deck);
  }
+ line(18,170,72,170,edge);
+ line(18,170,13,192,edge);line(72,170,77,192,edge);
+ line(13,192,77,192,edge);line(13,192,13,198,edge);
+ line(77,192,77,198,edge);line(13,198,77,198,edge);
+ rect(14,193,62,5,RGB(45,29,39));
+ /* Draw elliptical grooves with integer geometry, as on the reference deck. */
+ for(int yy=-9;yy<=9;yy++)for(int xx=-22;xx<=22;xx++){
+  int q=xx*xx*81+yy*yy*484;
+  if(q>39204)continue;
+  uint16_t c=q<=2600?RGB(192,121,96):RGB(25,20,31);
+  if(q>=36300||(q>=25500&&q<=27300)||(q>=17000&&q<=18400)||(q>=9000&&q<=10100))c=groove;
+  pixel(40+xx,181+yy,c);
+ }
+ /* Tiny moving mark rather than bright spinning highlights or floating notes. */
  uint32_t spin=recordOn?now*2386093u:0;
- int dx=(sine(spin+1073741824u)*12)>>15,dy=(sine(spin)*12)>>15;
- line(32+dx,176+dy,32+dx/2,176+dy/2,RGB(220,220,235));
- pixel(32,176,WHITE);
- rect(65,160,8,8,RGB(49,39,54));frame(65,160,8,8,peach);
- int armX=recordOn?44:75,armY=recordOn?179:190;
- line(69,164,recordOn?56:75,169,WHITE);
- line(recordOn?56:75,169,armX,armY,WHITE);
- rect(armX-2,armY-1,4,3,RGB(40,35,49));
- rect(75,191,5,3,recordOn?RGB(99,235,150):dim);
- if(recordOn){int noteY=151-(int)((now/90u)%8u);line(85,noteY-4,85,noteY+3,purple);rect(81,noteY+1,4,3,purple);line(85,noteY-4,90,noteY-2,purple);}
+ int dx=(sine(spin+1073741824u)*16)>>15;
+ int dy=(sine(spin)*6)>>15;
+ pixel(40+dx,181+dy,edge);
+ pixel(40,181,RGB(42,28,35));
+ rect(65,171,4,3,edge);
+ int elbowX=recordOn?58:69,elbowY=recordOn?177:181;
+ int armX=recordOn?51:69,armY=recordOn?183:187;
+ line(67,173,elbowX,elbowY,edge);line(elbowX,elbowY,armX,armY,edge);
+ pixel(armX-1,armY,edge);
+ rect(69,189,3,1,recordOn?edge:groove);
 
  frame(104,177,23,21,peach);frame(127,180,9,12,peach);
  for(int i=0;i<3;i++){int x=108+i*6;line(x,173,x+2,166-(int)((now/250+i)%3),dim);}
