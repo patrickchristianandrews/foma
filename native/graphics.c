@@ -83,6 +83,14 @@ void pixel(int x, int y, uint16_t color) {
   }
 }
 
+/* Shift only a clipped strip of the existing RGB332 framebuffer, no scratch RAM. */
+void lw_neon_shift_row(int y,int x,int w,int d){
+ if(!fb||(unsigned)y>=SCREEN_H||x<0||w<=0||x+w>SCREEN_W||d<=-w||d>=w)return;
+ uint8_t *p=fb+y*SCREEN_W+x;
+ if(d>0){for(int i=w-1;i>=d;i--)p[i]=p[i-d];for(int i=0;i<d;i++)p[i]=0;}
+ else if(d<0){for(int i=0;i<w+d;i++)p[i]=p[i-d];for(int i=w+d;i<w;i++)p[i]=0;}
+ fb_dirty(y,y+1);
+}
 void frame(int x, int y, int w, int h, uint16_t color) {
   rect(x, y, w, 1, color);
   rect(x, y + h - 1, w, 1, color);

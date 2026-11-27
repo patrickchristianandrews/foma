@@ -18,27 +18,34 @@ expect peak_db_min -55
 turn PRESET 1
 expect offworld_preset 1
 tap FX
+expect offworld_worldpage 1
+tap GLO
+expect offworld_auto 0
+tap SEL
 expect offworld_scene 1
 expect offworld_event 0
 tapkey w2
 expect offworld_event 2
 expect offworld_events 2
-tap FX
+tap SEL
 expect offworld_scene 2
-tap FX
+tap SEL
 expect offworld_scene 3
-tap FX
+tap SEL
 expect offworld_scene 4
-tap FX
+tap SEL
 expect offworld_scene 5
-tap FX
+tap SEL
 expect offworld_scene 6
-tap FX
+tap SEL
 expect offworld_scene 7
 tapkey w3
 expect offworld_event 8
-tap FX
+tap SEL
 expect offworld_scene 0
+expect offworld_cuts 8
+tap FX
+expect offworld_worldpage 0
 tap PLAY
 expect offworld_drone 1
 tapkey w1
@@ -62,5 +69,19 @@ peakreset
 tapkey w0
 wait 1000
 expect peak_db_min -55
+tap HOME
+expect offworld_active 0
+
+# Automatic cinematic cuts continue without manual scene input.
+tap HOME
+tap HOME
+tap HOME
+tap HOME
+tap HOME
+tap HOME
+expect offworld_active 1
+expect offworld_auto 1
+wait 36000
+expect offworld_cuts 1
 tap HOME
 expect offworld_active 0
