@@ -1,4 +1,10 @@
 wait 3500
+tapkey w0
+wait 250
+expect stage_leap 1
+expect stage_y <100
+wait 800
+expect stage_leap 0
 tap HOME
 tap HOME
 tap HOME
@@ -21,6 +27,10 @@ tap FX
 expect offworld_worldpage 1
 tap GLO
 expect offworld_auto 0
+turn K2 -1
+expect offworld_idle_events 0
+wait 4400
+expect offworld_event 0
 tap SEL
 expect offworld_scene 1
 expect offworld_event 0
@@ -29,6 +39,8 @@ tapkey w1
 wait 600
 expect offworld_event 2
 expect peak_db_min -55
+wait 4900
+expect offworld_event 0
 tap SEL
 expect offworld_scene 2
 expect offworld_event 0
@@ -37,6 +49,8 @@ tapkey w2
 wait 600
 expect offworld_event 3
 expect peak_db_min -55
+wait 4900
+expect offworld_event 0
 tap SEL
 expect offworld_scene 3
 expect offworld_event 0
@@ -45,6 +59,8 @@ tapkey w3
 wait 600
 expect offworld_event 4
 expect peak_db_min -55
+wait 4900
+expect offworld_event 0
 tap SEL
 expect offworld_scene 4
 expect offworld_event 0
@@ -53,6 +69,8 @@ tapkey w0
 wait 600
 expect offworld_event 5
 expect peak_db_min -55
+wait 4900
+expect offworld_event 0
 tap SEL
 expect offworld_scene 5
 expect offworld_event 0
@@ -61,6 +79,8 @@ tapkey w1
 wait 600
 expect offworld_event 6
 expect peak_db_min -55
+wait 4900
+expect offworld_event 0
 tap SEL
 expect offworld_scene 6
 expect offworld_event 0
@@ -69,6 +89,8 @@ tapkey w2
 wait 600
 expect offworld_event 7
 expect peak_db_min -55
+wait 4900
+expect offworld_event 0
 tap SEL
 expect offworld_scene 7
 expect offworld_event 0
@@ -77,8 +99,11 @@ tapkey w3
 wait 600
 expect offworld_event 8
 expect peak_db_min -55
+wait 4900
+expect offworld_event 0
 expect offworld_rendered_worlds 255
 expect offworld_rendered_events 255
+expect offworld_completed_events 255
 tap SEL
 expect offworld_scene 0
 expect offworld_cuts 8
@@ -130,7 +155,7 @@ tap HOME
 tap HOME
 expect offworld_active 1
 expect offworld_auto 1
-wait 36000
+wait 42000
 expect offworld_cuts 1
 tap HOME
 expect offworld_active 0

@@ -23,13 +23,19 @@ static uint8_t macros[4];
 static uint32_t latched;
 /* Main-loop-only encounter state; no framebuffer or audio allocations. */
 static uint32_t event_at,event_next,event_count;
-static int event_kind,event_x;
+static int event_kind,event_x,event_origin;
+static unsigned event_phase_mask;
+#define EVENT_MS 5200u
+#define APPROACH_MS 1100u
+#define LIFT_MS 3900u
+#define FINISH_MS 4600u
+static int ship_x(uint32_t now){int travel=(int)((now/38u)%320u);return 35+(travel>160?320-travel:travel);}
 static unsigned world_hash(unsigned n);
 /* Film control is independent of the synth and uses only scalar state. */
 static uint32_t cut_at,cut_due,cut_count,film_seed;
 static int world_page,world_level,logs_on,auto_cut,idle_events;
 #ifdef PLAT_HOST
-static unsigned rendered_worlds,rendered_events;
+static unsigned rendered_worlds,rendered_events,completed_events;
 #endif
 static unsigned seen_worlds;
 extern void lw_neon_shift_row(int y,int x,int w,int d);
@@ -40,7 +46,7 @@ static void film_cut(uint32_t now,int next){
  event_reset(now);eng_world(scene,world_level/100.0f);
 }
 static void film_auto(uint32_t now){
- if(!auto_cut||(int32_t)(now-cut_due)<0)return;
+ if(!auto_cut||event_kind||(int32_t)(now-cut_due)<0)return;
  /* Random order without repeats until all eight worlds have been visited. */
  unsigned choices=(~seen_worlds)&((1u<<NWORLD)-1u);
  if(!choices){seen_worlds=1u<<scene;choices=(~seen_worlds)&((1u<<NWORLD)-1u);}
@@ -48,13 +54,13 @@ static void film_auto(uint32_t now){
  int next=(int)(film_seed%NWORLD);
  for(int i=0;i<NWORLD;i++,next=(next+1)%NWORLD)if(choices&(1u<<next)){film_cut(now,next);break;}
 }
-static void event_reset(uint32_t now){event_kind=0;event_at=now;event_next=now+12000u+world_hash(now+scene)%16000u;}
+static void event_reset(uint32_t now){event_kind=0;event_at=now;event_phase_mask=0;event_next=now+6000u+world_hash(now+scene)%7000u;}
 static void event_start(uint32_t now,int key){
- if(event_kind && now-event_at<2200u)return;
+ if(event_kind)return;
  /* First note in each world triggers its signature event. Subsequent notes
   * can trigger another encounter after the current animation completes. */
- event_at=now;event_kind=1+scene;event_x=45+(int)(world_hash(now+(unsigned)key*37u)%150u);event_count++;
- event_next=now+12000u+world_hash(now+event_count)%16000u;
+ event_at=now;event_phase_mask=0;event_kind=1+scene;event_origin=ship_x(now);event_x=45+(int)(world_hash(now+(unsigned)key*37u)%150u);event_count++;
+ event_next=now+EVENT_MS+6000u+world_hash(now+event_count)%7000u;
  /* Use the pinned engine's existing, queued environmental effects. */
  if(world_level){
   float pan=(event_x-120)/120.0f;
@@ -79,7 +85,7 @@ void lw_offworld_enter(void){
  select_preset(0);event_count=0;world_page=0;world_level=25;logs_on=1;auto_cut=1;idle_events=1;
  uint32_t now=millis();cut_count=0;film_seed=world_hash(now+123u);seen_worlds=1u;cut_at=now-400u;cut_due=now+18000u+film_seed%17000u;
 #ifdef PLAT_HOST
- rendered_worlds=rendered_events=0;
+ rendered_worlds=rendered_events=completed_events=0;
 #endif
  eng_world(0,world_level/100.0f);event_reset(now);
  set_mode(2);
@@ -103,6 +109,7 @@ void lw_offworld_input(void){
  if(button_pressed(BTN_FX))world_page=!world_page;
  if(world_page&&button_pressed(BTN_SEL))film_cut(now,(scene+1)%NWORLD);
  if(world_page&&button_pressed(BTN_GLO)){auto_cut=!auto_cut;cut_due=now+18000u+film_seed%17000u;}
+ if(event_kind&&now-event_at>=EVENT_MS&&((event_phase_mask&15u)==15u||now-event_at>=EVENT_MS+1800u))event_kind=0;
  film_auto(now);
  int d=encoder(ENC_PRESETS);
  if(d)select_preset(preset+d);
@@ -121,7 +128,7 @@ void lw_offworld_input(void){
  if(button_pressed(BTN_ARP)){epic=!epic;eng_all_off();latched=0;}
  if(button_pressed(BTN_REC)){memory=!memory;eng_memory(memory);}
 
- if(event_kind&&now-event_at>=2200u)event_kind=0;
+
  if(world_page&&button_pressed(BTN_EDIT))event_start(now,scene);
  if(idle_events&&!event_kind&&(int32_t)(now-event_next)>=0)event_start(now,scene);
  for(int k=0;k<KEY_COUNT;k++){
@@ -201,39 +208,50 @@ static void creature(int x,int y,uint32_t now,uint16_t ink){
 }
 static void encounter_draw(uint32_t now,int ship,int sy,uint16_t ink){
  if(!event_kind)return;
- uint32_t age=now-event_at;if(age>=2200u)return;
- int x=event_x,up=age<450u?0:(int)((age-450u)*37u/1750u),y=119-up;
- int lift_x=age<450u?x:ship;
+ uint32_t age=now-event_at;if(age>EVENT_MS)age=EVENT_MS;
+ unsigned phase=age<APPROACH_MS?1u:age<LIFT_MS?2u:age<FINISH_MS?4u:8u;
+ event_phase_mask|=phase;
+ int x=event_x,base=event_kind==1?117:event_kind==2?116:119;
+ int lift=age<APPROACH_MS?0:age>=LIFT_MS?1000:(int)((age-APPROACH_MS)*1000u/(LIFT_MS-APPROACH_MS));
+ int y=base+(sy+8-base)*lift/1000;
+ int lift_x=x;
 #ifdef PLAT_HOST
  rendered_events|=1u<<(event_kind-1);
+ if((event_phase_mask&15u)==15u)completed_events|=1u<<(event_kind-1);
 #endif
  switch(event_kind){
  case 1: /* abduct a vehicle */
-  flying_car(lift_x,y,WHITE);break;
+  if(age<LIFT_MS)flying_car(lift_x,y,WHITE);
+  else if(age<FINISH_MS)orb(ship,sy+10,4,WHITE);
+  break;
  case 2: /* abduct an alien from the forest */
-  creature(lift_x,y-6,now,ink);break;
+  if(age<LIFT_MS)creature(lift_x,y-6,now,ink);
+  else if(age<FINISH_MS)orb(ship,sy+10,4,WHITE);
+  break;
  case 3: /* meteor shower */
   for(int i=0;i<4;i++){int mx=12+(int)((age/9u+i*51u)%205u),my=50+(int)((age/32u+i*9u)%35u);
    line(mx,my,mx-8,my+6,WHITE);line(mx-8,my+6,mx-16,my+12,ink);}
   break;
  case 4: /* levitating crystal */
-  line(lift_x,y-7,lift_x-5,y,WHITE);line(lift_x-5,y,lift_x,y+7,ink);
-  line(lift_x,y+7,lift_x+5,y,ink);line(lift_x+5,y,lift_x,y-7,WHITE);break;
+  if(age<LIFT_MS){line(lift_x,y-7,lift_x-5,y,WHITE);line(lift_x-5,y,lift_x,y+7,ink);
+   line(lift_x,y+7,lift_x+5,y,ink);line(lift_x+5,y,lift_x,y-7,WHITE);}
+  else if(age<FINISH_MS)orb(ship,sy+10,4,WHITE);break;
  case 5: /* lightning over volcano */
   if((age/130u)%3u==0){line(x,49,x-10,66,WHITE);line(x-10,66,x+5,76,ink);line(x+5,76,x-4,104,WHITE);}
   for(int i=0;i<5;i++)pixel(x-12+i*6,105-(int)((age/30u+i*5u)%25u),ink);
   break;
  case 6: /* passing spacecraft and signal pulse */
-  flying_car(15+(int)(age*205u/2200u),87,WHITE);
+  flying_car(15+(int)(age*205u/EVENT_MS),87,WHITE);
   for(int i=0;i<3;i++){int r=3+(int)((age/65u+i*5u)%15u);
    line(x-r,91-r,x+r,91-r,ink);line(x-r,91+r,x+r,91+r,ink);}
   break;
  case 7: /* opening portal */
-  {int r=4+(int)((age<1100u?age:2200u-age)/90u);
-   orb(x,102,r,ink);orb(x,102,r>3?r-3:1,BLACK);if(age>400u)creature(x+(int)((age-400u)/80u),103+(int)((age-400u)/130u),now,WHITE);}
+  {int r=age<1100u?4+(int)(age/90u):age<3900u?16:4+(int)((EVENT_MS-age)*12u/(EVENT_MS-3900u));
+   if(age<FINISH_MS){orb(x,102,r,ink);orb(x,102,r>3?r-3:1,BLACK);}
+   if(age>1000u)creature(bound(x+(int)((age-1000u)/70u),15,222),bound(103+(int)((age-1000u)/180u),103,120),now,WHITE);}
   break;
  case 8: /* ice comet and visitor */
-  {int mx=210-(int)(age*180u/2200u),my=56+(int)(age*29u/2200u);
+  {int mx=210-(int)(age*180u/EVENT_MS),my=56+(int)(age*29u/EVENT_MS);
    line(mx,my,mx+18,my-5,ink);orb(mx,my,3,WHITE);creature(x,117,now,ink);}
   break;
  }
@@ -292,7 +310,7 @@ static void alien_draw(uint32_t now){
   for(int x=8;x<229;x+=5){int y=63+((sine((uint32_t)x*0x03000000u+now*140000u)*7)>>15);rect(x,y,5,2,ink);}
   for(int i=0;i<12;i++){unsigned h=world_hash(i+7u);pixel(8+(int)(h%220u),53+(int)(((h>>12)+now/110u)%74u),WHITE);}break;
  }
- int travel=(int)((now/38u)%320u),ship=35+(travel>160?320-travel:travel);
+ int ship=ship_x(now);
  int bob=(int)((now/160u)%8u),sy=59+(bob>4?8-bob:bob);
  /* Ambient traffic and ground life animate even when no keys are held. */
  if(scene==0||scene==2||scene==5){
@@ -302,9 +320,13 @@ static void alien_draw(uint32_t now){
  if(scene==1||scene==6||scene==7){int cx=14+(int)((now/70u)%210u);creature(cx,119,now,ink);}
  int abduct=event_kind==1||event_kind==2||event_kind==4;
  uint32_t age=now-event_at;
- if(abduct){int u=bound((int)age,0,450);ship=(ship*(450-u)+event_x*u)/450;}
- saucer(ship,sy,now,ink,abduct&&age>=450u?20:((latched||pulse>3)?pulse+1:0),119);
- if(abduct&&age>=450u)for(int i=0;i<5;i++){int yy=sy+14+(int)((age/25u+i*11u)%30u);pixel(ship+(i-2)*3,yy,WHITE);}
+ if(abduct){
+  if(age<APPROACH_MS)ship=(event_origin*(int)(APPROACH_MS-age)+event_x*(int)age)/(int)APPROACH_MS;
+  else if(age<FINISH_MS)ship=event_x;
+  else {int u=bound((int)(age-FINISH_MS),0,(int)(EVENT_MS-FINISH_MS));ship=event_x+(ship-event_x)*u/(int)(EVENT_MS-FINISH_MS);}
+ }
+ saucer(ship,sy,now,ink,abduct?(age>=APPROACH_MS&&age<LIFT_MS?30:0):((latched||pulse>3)?pulse+1:0),119);
+ if(abduct&&age>=APPROACH_MS&&age<LIFT_MS)for(int i=0;i<7;i++){int yy=sy+14+(int)((age/25u+i*11u)%36u);pixel(ship+(i-3)*3,yy,WHITE);}
  encounter_draw(now,ship,sy,ink);
  for(int i=0;i<macros[3]/8;i++){unsigned q=world_hash((unsigned)i+scene*91u);
   int x=7+(int)((q+(now/35u)*2u)%222u),y=50+(int)(((q>>8)+now/13u)%38u);line(x,y,x-2,y+4,RGB(86,120,155));}
@@ -316,9 +338,9 @@ static void alien_draw(uint32_t now){
   }
   rect(4,48+(int)(film_seed%76u),232,1,RGB(255,70,180));rect(4,48+(int)((film_seed>>9)%76u),232,1,ink);
  }
- if(since<3000u){char tag[24];unsigned n=since/80u,k=0;while(k<n&&k<sizeof(tag)-1&&worlds[scene][k]){tag[k]=worlds[scene][k];k++;}tag[k]=0;
+ if(!event_kind&&since<3000u){char tag[24];unsigned n=since/80u,k=0;while(k<n&&k<sizeof(tag)-1&&worlds[scene][k]){tag[k]=worlds[scene][k];k++;}tag[k]=0;
   rect(6,48,140,13,BLACK);text(9,48,tag,ink,FONT_SMALL);}
- if(logs_on&&since>=3000u&&since<6500u){
+ if(!event_kind&&logs_on&&since>=3000u&&since<6500u){
   static const char *const log[NWORLD]={"CITY SIGNAL LOCKED","LIFEFORM DETECTED","ORBITAL LINK ONLINE","CRYSTAL RESONANCE","THERMAL ANOMALY","SIGNAL ACQUIRED","PORTAL ACTIVITY","ICE FIELD AHEAD"};
   char msg[24];unsigned n=(since-3000u)/65u,k=0;while(k<n&&k<sizeof(msg)-1&&log[scene][k]){msg[k]=log[scene][k];k++;}msg[k]=0;
   rect(6,48,165,13,BLACK);text(9,48,msg,ink,FONT_SMALL);
@@ -358,7 +380,10 @@ void lw_offworld_draw(void){
  text(8,28,world_page?"WORLD SETTINGS":names[preset],pink,FONT_SMALL);
  alien_draw(now);
  text(8,140,worlds[scene],neon,FONT_SMALL);
- text(150,140,event_kind?"ENCOUNTER":(auto_cut?"AUTO TOUR":"SCENE HOLD"),event_kind?pink:WHITE,FONT_SMALL);
+ const char *status=auto_cut?"AUTO TOUR":"SCENE HOLD";
+ if(event_kind){uint32_t age=now-event_at;int abduct=event_kind==1||event_kind==2||event_kind==4;
+  status=age<APPROACH_MS?(abduct?"TARGET LOCK":"CONTACT"):age<LIFT_MS?(abduct?"BEAM ACTIVE":"ENCOUNTER"):age<FINISH_MS?(abduct?"CAPTURED":"RESOLVING"):"COMPLETE";}
+ text(240-text_width(status,FONT_SMALL)-5,140,status,event_kind?pink:WHITE,FONT_SMALL);
  for(int i=0;i<4;i++){
   int x=5+i*59;char val[12];int v=macros[i];
   if(world_page){
@@ -394,6 +419,8 @@ int lw_offworld_expect(const char *name,int *v){
  else if(!strcmp(name,"offworld_idle_events"))*v=idle_events;
  else if(!strcmp(name,"offworld_rendered_worlds"))*v=(int)rendered_worlds;
  else if(!strcmp(name,"offworld_rendered_events"))*v=(int)rendered_events;
+ else if(!strcmp(name,"offworld_completed_events"))*v=(int)completed_events;
+ else if(!strcmp(name,"offworld_event_phase"))*v=(int)event_phase_mask;
  else return 0;return 1;
 }
 #endif

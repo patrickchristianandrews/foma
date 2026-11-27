@@ -885,6 +885,14 @@ static void portrait_at(int i,int x,int y){
 enum { SWIM_FLOAT, SWIM_PADDLE, SWIM_SURF, SWIM_DIVE, SWIM_LEAP, SWIM_SPLASH };
 static uint8_t swimMode[NC];
 static uint32_t swimSince[NC], swimDuration[NC];
+#if defined(FOMA_NATIVE_WIFI) && FOMA_NATIVE_WIFI
+static uint32_t stageHit[NC],stageLeap[NC];
+static int stage_jump(int i,uint32_t now){
+ if(!stageLeap[i]||now-stageLeap[i]>=720u)return 0;
+ uint32_t age=now-stageLeap[i];
+ return (sine(age*(0x80000000u/720u))*34)>>15;
+}
+#endif
 static int surface_at(int x,uint32_t now){
  return SURF_Y+((sine((uint32_t)x*(1u<<25)-now*410000u)*5)>>15);
 }
@@ -900,7 +908,7 @@ static void surface_patch(int x,int w){
  }
 }
 #if defined(FOMA_NATIVE_WIFI) && FOMA_NATIVE_WIFI
-enum { STAGE_CENTER=18, STAGE_HEIGHT=30, STAGE_MAX_X=199, STAGE_ROW_Y=84, STAGE_ROW_GAP=27, STAGE_CLEAR_TOP=82 };
+enum { STAGE_CENTER=18, STAGE_HEIGHT=30, STAGE_MAX_X=199, STAGE_ROW_Y=88, STAGE_ROW_GAP=29, STAGE_CLEAR_TOP=48 };
 #else
 enum { STAGE_CENTER=12, STAGE_HEIGHT=22, STAGE_MAX_X=208, STAGE_ROW_Y=92, STAGE_ROW_GAP=24, STAGE_CLEAR_TOP=90 };
 #endif
@@ -928,12 +936,23 @@ static int stage_singing(int i,uint32_t now){
 }
 static void swimmer_step(int i,uint32_t now){
  Face *a=&f[i];
+ #if defined(FOMA_NATIVE_WIFI) && FOMA_NATIVE_WIFI
+ if(stageHit[i]!=active[i]){stageHit[i]=active[i];if((int32_t)(active[i]-now)>0&&!(p.mute&(1<<i)))stageLeap[i]=now;}
+ int leaping=stageLeap[i]&&now-stageLeap[i]<720u&&!(p.mute&(1<<i));
+ if(stage_singing(i,now)||leaping){
+ #else
  if(stage_singing(i,now)){
+ #endif
   int bob=sine(now*260000u+(uint32_t)i*536870912u)>>14;
   /* Hover in two rows just below the plane's banner, clear of water. */
   int target=STAGE_ROW_Y+(i/4)*STAGE_ROW_GAP+bob;
   int lane=8+(i%4)*55;
+ #if defined(FOMA_NATIVE_WIFI) && FOMA_NATIVE_WIFI
+  if(leaping)target=clamp(target-stage_jump(i,now),49,118);
+  a->y+=clamp(target-a->y,-22,14);
+ #else
   a->y+=clamp(target-a->y,-12,12);
+ #endif
   /* On entry, clear the water immediately rather than singing submerged. */
   if(a->y>surface_at(a->x+STAGE_CENTER,now)-STAGE_HEIGHT)a->y=surface_at(a->x+STAGE_CENTER,now)-STAGE_HEIGHT;
   a->x+=clamp(lane-a->x,-4,4);
@@ -970,8 +989,16 @@ static void swimmer_step(int i,uint32_t now){
  a->y+=clamp(target-rise-a->y,-3,3);
 }
 static void stage_splash(int i,uint32_t now){
- if(stage_singing(i,now))return;
  Face *a=&f[i];int cx=a->x+STAGE_CENTER,water=surface_at(cx,now);
+#if defined(FOMA_NATIVE_WIFI) && FOMA_NATIVE_WIFI
+ if(stageLeap[i]&&now-stageLeap[i]<500u){
+  unsigned t=(now-stageLeap[i])/45u;
+  for(int k=-1;k<=1;k+=2){int x=clamp(cx+k*(4+(int)t*2),1,238),y=water-4-(int)(t*(11u-t)/3u);
+   rect(x,y,2,2,RGB(220,248,255));pixel(clamp(x+k*3,1,238),y+4,RGB(115,211,239));}
+  return;
+ }
+#endif
+ if(stage_singing(i,now))return;
  uint32_t age=now-swimSince[i];unsigned t=(age/80u)%10u;
  int mode=swimMode[i],cross=a->y+STAGE_HEIGHT/2-water;
  if(mode==SWIM_SURF){
@@ -1328,6 +1355,8 @@ int lw_loop_expect(const char *name,int *v){
  else if(!strcmp(name,"loop_track"))*v=lb_track;
  else if(!strcmp(name,"loop_length"))*v=lb_length;
  else if(!strcmp(name,"loop_steps")){*v=0;for(int i=0;i<lb_length;i++)*v+=lb_on(lb_track,i);}
+ else if(!strcmp(name,"stage_leap"))*v=stageLeap[p.sel]&&millis()-stageLeap[p.sel]<720u;
+ else if(!strcmp(name,"stage_y"))*v=f[p.sel].y;
  else return 0;
  return 1;
 }
