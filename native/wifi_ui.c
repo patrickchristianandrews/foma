@@ -3,14 +3,16 @@
 #include "plat.h"
 #include "../platform/fm1.h"
 static int pick,editing,len,choice;
+static const char *message="";
+extern int lw_radio_can_power_off(void);
 static char ssid[33],password[65];
 static const char alphabet[]="abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 !@#$%^&*()-_=+[]{};:'\",.<>/?\\|~`";
 static const char *const states[]={"OFF","STARTING","READY","JOINING","GETTING IP","CONNECTED","FAILED"};
 static void wipe_password(void){volatile char *p=password;for(unsigned i=0;i<sizeof(password);i++)p[i]=0;len=0;}
 static void join_selected(void){
- if(!plat_wifi_found(pick,ssid,0,0))return;
- int secured=0;plat_wifi_found(pick,0,0,&secured);
- if(!secured||plat_wifi_kept(ssid)){plat_wifi_join(ssid,0);return;}
+ int secured=0;
+ if(!plat_wifi_found(pick,ssid,0,&secured)){message="SCAN FIRST";return;}
+ if(!secured||plat_wifi_kept(ssid)){message=plat_wifi_join(ssid,0)?"JOIN NOT READY":"";return;}
  wipe_password();editing=1;choice=0;
 }
 void lw_wifi_leave(void){editing=0;wipe_password();}
@@ -21,13 +23,21 @@ int lw_wifi_step(void){
   if(d){choice=(choice+d)%n;if(choice<0)choice+=n;}
   if(button_pressed(BTN_SEL)&&len<64){password[len++]=alphabet[choice];password[len]=0;}
   if(button_pressed(BTN_EDIT)&&len)password[--len]=0;
-  if(button_pressed(BTN_PLAY)&&len>=8){plat_wifi_join(ssid,password);lw_wifi_leave();}
+  if(button_pressed(BTN_PLAY)){
+   if(len<8)message="MINIMUM 8 CHARACTERS";
+   else if(plat_wifi_join(ssid,password))message="JOIN NOT READY";
+   else {lw_wifi_leave();message="";}
+  }
   if(button_pressed(BTN_GLO)){lw_wifi_leave();}
   return d||button_pressed(BTN_SEL)||button_pressed(BTN_EDIT)||button_pressed(BTN_PLAY)||button_pressed(BTN_GLO);
  }
  if(d){pick+=d;if(pick<0)pick=0;if(pick>63)pick=63;while(pick>0&&!plat_wifi_found(pick,0,0,0))pick--;}
- if(button_pressed(BTN_GLO))plat_wifi_on(plat_wifi_state()==WIFI_OFF);
- if(button_pressed(BTN_SEL)){pick=0;plat_wifi_scan();}
+ if(button_pressed(BTN_GLO)){
+  if(plat_wifi_state()==WIFI_OFF){plat_wifi_on(1);message="";}
+  else if(lw_radio_can_power_off()){plat_wifi_on(0);message="";}
+  else message="WAIT FOR RADIO TO STOP";
+ }
+ if(button_pressed(BTN_SEL)){pick=0;message=plat_wifi_scan()?"TURN WI-FI ON FIRST":"";}
  if(button_pressed(BTN_SAVE))join_selected();
  return d||button_pressed(BTN_GLO)||button_pressed(BTN_SEL)||button_pressed(BTN_SAVE);
 }
@@ -50,11 +60,13 @@ void lw_wifi_draw(void){
   text(8,152,"SELECT: CHANGE CHARACTER",WHITE,FONT_SMALL);
   text(8,172,"SEL: ADD / EDIT: DELETE",WHITE,FONT_SMALL);
   text(8,192,"PLAY: JOIN / GLO: CANCEL",WHITE,FONT_SMALL);
+  clipped(8,220,message,cyan);
   return;
  }
  text(8,30,st>=0&&st<=WIFI_FAILED?states[st]:"UNKNOWN",cyan,FONT_SMALL);
  clipped(8,50,st==WIFI_FAILED?plat_wifi_why():plat_wifi_ssid(),WHITE);
- if(st==WIFI_CONNECTED){
+ if(*message)clipped(8,70,message,cyan);
+ else if(st==WIFI_CONNECTED){
   char ip[16],*p=ip;uint32_t v=plat_wifi_ip();
   for(int i=0;i<4;i++){char b[12];format_int(b,(v>>(8*i))&255u);for(int j=0;b[j];j++)*p++=b[j];if(i<3)*p++='.';}*p=0;
   text(8,70,ip,dim,FONT_SMALL);
