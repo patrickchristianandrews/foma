@@ -20,6 +20,8 @@ int lw_wifi_step(void){
  int d=encoder(ENC_SELECT);
  int n=(int)sizeof(alphabet)-1;
  if(editing){
+  int group=encoder(ENC_KNOB1);
+  if(group){int g=choice<26?0:choice<52?1:choice<62?2:3;g=(g+group)%4;if(g<0)g+=4;choice=g==0?0:g==1?26:g==2?52:62;}
   if(d){choice=(choice+d)%n;if(choice<0)choice+=n;}
   if(button_pressed(BTN_SEL)&&len<63){password[len++]=alphabet[choice];password[len]=0;}
   if(button_pressed(BTN_EDIT)&&len)password[--len]=0;
@@ -29,7 +31,7 @@ int lw_wifi_step(void){
    else {lw_wifi_leave();message="";}
   }
   if(button_pressed(BTN_GLO)){lw_wifi_leave();}
-  return d||button_pressed(BTN_SEL)||button_pressed(BTN_EDIT)||button_pressed(BTN_PLAY)||button_pressed(BTN_GLO);
+  return d||group||button_pressed(BTN_SEL)||button_pressed(BTN_EDIT)||button_pressed(BTN_PLAY)||button_pressed(BTN_GLO);
  }
  if(d){pick+=d;if(pick<0)pick=0;if(pick>63)pick=63;while(pick>0&&!plat_wifi_found(pick,0,0,0))pick--;}
  if(button_pressed(BTN_GLO)){
@@ -56,9 +58,10 @@ void lw_wifi_draw(void){
   char mask[25];int i=0;while(i<len&&i<24)mask[i++]='*';mask[i]=0;
   text(8,80,mask,WHITE,FONT_SMALL);
   char ch[2]={alphabet[choice],0},count[12];format_int(count,len);
-  text(8,104,"CHAR:",dim,FONT_SMALL);text(75,104,ch,cyan,FONT_BIG);
+  text(8,104,"CHAR:",dim,FONT_SMALL);text(75,104,ch,cyan,FONT_SMALL);
   text(150,104,count,WHITE,FONT_SMALL);
-  text(8,152,"SELECT: CHANGE CHARACTER",WHITE,FONT_SMALL);
+  text(8,128,choice<26?"LOWERCASE a-z":choice<52?"UPPERCASE A-Z":choice<62?"NUMBERS 0-9":"SYMBOLS",cyan,FONT_SMALL);
+  text(8,152,"K1 GROUP / SELECT CHAR",WHITE,FONT_SMALL);
   text(8,172,"SEL: ADD / EDIT: DELETE",WHITE,FONT_SMALL);
   text(8,192,"PLAY: JOIN / GLO: CANCEL",WHITE,FONT_SMALL);
   clipped(8,220,message,cyan);
