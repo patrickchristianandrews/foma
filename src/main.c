@@ -419,9 +419,22 @@ static void transport(void){
 int liquid_weather_destination(void){return weather.place;}
 int liquid_weather_room_active(void){return page==WEATHER;}
 
+static int weather_clock_second=-1;
+int liquid_weather_accept_clock(unsigned destination,const LiquidWeather *reading,int local_seconds){
+ if(!liquid_weather_accept(destination,reading))return 0;
+ if(local_seconds>=0&&local_seconds<86400){
+  weather.reading.local_minute=(uint16_t)(local_seconds/60);
+  weather_clock_second=local_seconds%60;
+ }
+ return 1;
+}
+static unsigned weather_local_minute(uint32_t now){
+ return (weather.reading.local_minute+(now-weather.synced+(weather_clock_second<0?0u:(unsigned)weather_clock_second*1000u))/60000u)%1440u;
+}
 int liquid_weather_accept(unsigned destination,const LiquidWeather *reading){
  if(destination>=liquid_place_count||destination!=(unsigned)weather.place||!liquid_weather_valid(reading))return 0;
  weather.reading=*reading;
+ weather_clock_second=-1;
  weather.synced=millis();
  weather.available=1;
  return 1;
@@ -454,7 +467,7 @@ static int weather_fresh(uint32_t now){
 static void weather_generate(uint32_t now){
  int moon=weather.place==LIQUID_MOON;
  LiquidWeather current=weather_fresh(now)?weather.reading:offline_weather(now);
- if(!moon&&weather_fresh(now))current.local_minute=(uint16_t)((current.local_minute+(now-weather.synced)/60000u)%1440);
+ if(!moon&&weather_fresh(now))current.local_minute=(uint16_t)weather_local_minute(now);
  weather.music=liquid_weather_music(&current,moon?0:liquid_places[weather.place].rhythm,moon);
  if(!weather.seed)weather.seed=random32();
  liquid_song_generate(weather.music.style,++weather.seed,weather.pattern,&weather.harmony);
@@ -539,7 +552,7 @@ static void weather_hud(uint32_t now){
  int live=!moon&&weather_fresh(now);
  LiquidWeather demo=offline_weather(now);
  unsigned code=live?weather.reading.code:demo.code;
- unsigned minute=live?(weather.reading.local_minute+(now-weather.synced)/60000u)%1440:demo.local_minute;
+ unsigned minute=live?weather_local_minute(now):demo.local_minute;
  int night=minute<360||minute>=1080;
  int snow=code>=71&&code<=77;
  int rain=(code>=51&&code<=67)||(code>=80&&code<=82)||code>=95;
@@ -690,7 +703,7 @@ static void weather_hud(uint32_t now){
   clock[n++]=(char)('0'+hour%10u);clock[n++]=':';
   clock[n++]=(char)('0'+minute%60u/10u);clock[n++]=(char)('0'+minute%10u);
   clock[n++]=' ';clock[n++]=minute<720u?'A':'P';clock[n++]='M';clock[n]=0;
-  text(8,222,"LOCAL TIME",peach,FONT_SMALL);text(110,222,clock,WHITE,FONT_SMALL);
+  text(8,222,weather_clock_second<0?"EST TIME":"LOCAL TIME",peach,FONT_SMALL);text(110,222,clock,WHITE,FONT_SMALL);
  }else text(8,222,"K1 SKY K2 HR K3 F K4 WIND",peach,FONT_SMALL);
  if(ambientLevel)text(8,35,"AMB",purple,FONT_SMALL);
  if(animalLevel)text(34,35,"CALL",purple,FONT_SMALL);
