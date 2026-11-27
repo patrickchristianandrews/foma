@@ -8,8 +8,15 @@ ble = false
 usb_audio_in = false
 usb_audio_out = false
 include = ["../platform", "../src"]
-o2 = ["platform.c", "graphics.c", "wifi_ui.c", "../src/main.c", "../src/liquid_song.c", "../src/weather.c", "../src/weather_parse.c"]
-o2_cflags = ["-DFOMA_BLUETOOTH=0", "-DFOMA_USB_AUDIO=0", "-DFOMA_TRS_MIDI=0", "-DFOMA_MIDI_CLOCK=0", "-DFOMA_NATIVE_WIFI=1"]
+o2 = ["platform.c", "graphics.c", "wifi_ui.c", "radio_bridge.c", "reference/third_party/pvaac/*.c", "../src/main.c", "../src/liquid_song.c", "../src/weather.c", "../src/weather_parse.c"]
+o2_cflags = ["-DFOMA_BLUETOOTH=0", "-DFOMA_USB_AUDIO=0", "-DFOMA_TRS_MIDI=0", "-DFOMA_MIDI_CLOCK=0", "-DFOMA_NATIVE_WIFI=1", "-DAAC_PLUS"]
+o2_include = ["reference/third_party/pvaac/pv_fm1.h"]
+rom_check_skip = ["pv_log2"]
+vendored = ["reference/third_party/"]
+device_include = ["reference/third_party/compat"]
+net = ["reference/net/radio_net.c", "reference/third_party/bearssl/src/**/*.c"]
+net_include = ["reference/third_party/bearssl/inc", "reference/third_party/bearssl/src"]
+net_cflags = ["-DBR_USE_UNIX_TIME=0", "-DBR_USE_WIN32_TIME=0", "-DBR_USE_URANDOM=0", "-DBR_USE_GETENTROPY=0", "-DBR_USE_WIN32_RAND=0", "-DBR_RDRAND=0", "-DBR_AES_X86NI=0", "-DBR_SSE2=0", "-DBR_POWER8=0", "-DBR_64=0", "-DBR_INT128=0", "-DBR_UMUL128=0", "-DBR_LE_UNALIGNED=0", "-DBR_BE_UNALIGNED=0"]
 words = "words.tsv"
 repo = "https://github.com/patrickchristianandrews/foma"
 licence = "GPL-3.0"
