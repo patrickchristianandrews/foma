@@ -63,10 +63,31 @@ s=s.replace("        if (dec_use(radio_mode != 2 && radio_net_aac ? 2 : 1)) {","
 # Reuse the existing network transport on the same worker budget. The result
 # buffer is owned by the weather worker, not the audio callback.
 net=dest/"net/radio_net.c"
+# Capture HTTP Date for weather only. Open-Meteo current.time is a model
+# observation interval, not the wall clock. Keep the existing radio protocol.
+ns=net.read_text()
+marker="static int http_open(conn_t *c, char *u, unsigned umax, int json)"
+assert ns.count(marker)==1
+ns=ns.replace(marker,r"""
+static int lw_http_utc=-1;
+static void lw_http_date(const char *p){
+    /* IMF-fixdate: Wed, 25 Nov 2026 05:14:03 GMT */
+    while(*p==' ')p++;
+    if(strlen(p)!=29 || p[19]!=':' || p[22]!=':' || strcmp(p+25," GMT"))return;
+    const unsigned char ix[]={17,18,20,21,23,24};
+    for(unsigned i=0;i<sizeof ix;i++)if(p[ix[i]]<'0'||p[ix[i]]>'9')return;
+    int h=(p[17]-'0')*10+p[18]-'0',m=(p[20]-'0')*10+p[21]-'0',s=(p[23]-'0')*10+p[24]-'0';
+    if(h<24&&m<60&&s<60)lw_http_utc=h*3600+m*60+s;
+}
+"""+marker)
+marker='        } else if (ieq_prefix(line, "content-type:")) {'
+assert ns.count(marker)==1
+ns=ns.replace(marker,'        } else if (json==2 && ieq_prefix(line, "date:")) {\n            lw_http_date(line+5);\n'+marker)
+net.write_text(ns)
 with net.open("a") as f:
     f.write(r"""
 /* Bounded public JSON request; caller serializes all radio/weather tasks. */
-int lw_net_json(char *url, unsigned url_cap, char *out, unsigned cap, char *why)
+int lw_net_json(char *url, unsigned url_cap, char *out, unsigned cap, char *why, int *utc)
 {
     conn_t c = {-1, 0, 0, why};
     int rc, got, tries;
@@ -75,7 +96,8 @@ int lw_net_json(char *url, unsigned url_cap, char *out, unsigned cap, char *why)
     if(cap<2)return -1;
     why[0]=0;
     for(tries=0;tries<3;tries++){
-        rc=http_open(&c,url,url_cap,1);
+        lw_http_utc=-1;
+        rc=http_open(&c,url,url_cap,2);
         if(rc!=1)break;
     }
     if(rc!=0)return -1;
@@ -92,6 +114,7 @@ int lw_net_json(char *url, unsigned url_cap, char *out, unsigned cap, char *why)
         if(!why[0])why_to(why,"weather response");
         return -1;
     }
+    *utc=lw_http_utc;
     return (int)used;
 }
 """)
