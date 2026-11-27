@@ -31,3 +31,9 @@ s=s.replace("free(net_buf); free(pcm_buf);","free(net_buf); free(pcm_buf); free(
 # Volatile playback state: shared between main loop and render.
 s=s.replace("static uint8_t radio_st;","static volatile uint8_t radio_st;")
 (dest/"radio_core.c").write_text(s)
+
+# C99 inline functions need internal linkage in each decoder translation unit.
+header=dest/"third_party/pvaac/getbits.h"
+s=header.read_text()
+s=s.replace("__inline UInt", "static __inline UInt")
+header.write_text(s)
