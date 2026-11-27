@@ -1,7 +1,12 @@
 {
   "name": "POCKET WAVE",
-  "version": "0.1",
+  "version": "0.1-beta2",
   "identity": "FM-1_96",
   "platform": "felucca",
-  "options": {"usb_audio": false, "trs_midi": false, "midi_clock": false, "bluetooth": false}
+  "options": {
+    "usb_audio": false,
+    "trs_midi": false,
+    "midi_clock": false,
+    "bluetooth": true
+  }
 }

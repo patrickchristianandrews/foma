@@ -200,6 +200,10 @@ static void screen_flush(void) {
     int h = fb_y1 - y > 64 ? 64 : fb_y1 - y;
     lcd_blit(0, (uint32_t)y, SCREEN_W, (uint32_t)h, fb + y * SCREEN_W);
   }
+  /* lcd_blit leaves the last strip's DMA running. The application owns a
+   * single framebuffer, so finish the transfer before loop() can modify it.
+   * Otherwise a full-screen redraw can corrupt the bottom 48 rows. */
+  lcd_sync();
   fb_y0 = SCREEN_H;
   fb_y1 = 0;
 }
@@ -287,6 +291,8 @@ void midi_send(uint8_t status, uint8_t d1, uint8_t d2) {
 }
 
 /* ---- time */
+static int battBars=-1;
+int battery_bars(void) { return battBars; }
 uint32_t millis(void) { return fm1_ms; }
 uint32_t micros(void) { return fm1_micros(); }
 
@@ -477,6 +483,18 @@ static void platform_poll(void) {
   }
   if (fm1_ms >= 30000u && bootguard.pending) {
     bootguard_clear(&bootguard); /* 30 s up: this firmware boots */
+  }
+  static uint32_t battLast;
+  static int32_t battAvg;
+  if(fm1_ms-battLast>=1000u){
+    battLast=fm1_ms;
+    int32_t sample=fm1_adc_read(FM1_ADC_BATT);
+    if(sample>=0){
+      if(!battAvg)battAvg=sample*16;
+      else battAvg+=(sample*16-battAvg)/8;
+      int32_t v=battAvg/16;
+      battBars=v<531?0:v<561?1:v<591?2:3;
+    }
   }
   if ((a = fm1_adc_read(FM1_ADC_MASTER)) >= 0) {
     uint32_t k10;

@@ -582,7 +582,7 @@ $('check').addEventListener('click', async () => {
     else {
       dev.link.close()
       const t = dev.id.text
-      $('checkinfo').textContent = /^ota-/i.test(dev.id.model) ? `${t}: in update mode, an install is not finished (Rescue tab).` : t === 'FM-1_000' ? `${t}: in the USB rescue. Install a firmware.` : build && t === build.identity ? `${t}: runs this project (${build.name} ${build.version}).` : `${t} (on "${dev.name}")`
+      $('checkinfo').textContent = /^ota-/i.test(dev.id.model) ? `${t}: in update mode, an install is not finished (Rescue tab).` : t === 'FM-1_000' ? `${t}: in the USB rescue. Install a firmware.` : build && t === build.identity ? `${t}: matches the project identity. USB identity alone cannot verify the installed build version; check the FM-1 startup screen.` : `${t} (on "${dev.name}")`
     }
   } catch (e) {
     $('checkinfo').textContent = e.message

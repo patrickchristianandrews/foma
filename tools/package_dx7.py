@@ -11,7 +11,10 @@ API = 'https://api.github.com/repos/' + REPO
 HEADERS = {'User-Agent': 'Pocket-Wave-packager', 'Accept': 'application/vnd.github+json'}
 
 def _get(url):
-    with urllib.request.urlopen(urllib.request.Request(url, headers=HEADERS), timeout=60) as r:
+    headers = dict(HEADERS)
+    if url.startswith('https://api.github.com/') and os.environ.get('GH_TOKEN'):
+        headers['Authorization'] = 'Bearer ' + os.environ['GH_TOKEN']
+    with urllib.request.urlopen(urllib.request.Request(url, headers=headers), timeout=60) as r:
         return r.read()
 
 def validate(b):

@@ -1,0 +1,26 @@
+wait 3500
+expect wifi_state 5
+tap HOME
+tap HOME
+tap HOME
+tap SEL
+turn SELECT 1
+tap SAVE
+wait 2000
+expect wifi_state 5
+tap ARP
+wait 300
+peakreset
+tap PLAY
+wait 1500
+expect radio_state 3
+expect radio_buffers 1
+expect peak_db_min -45
+expect peak_db_max 0
+tap PLAY
+wait 200
+expect radio_state 0
+tap HOME
+wait 200
+expect radio_buffers 0
+expect radio_active 0

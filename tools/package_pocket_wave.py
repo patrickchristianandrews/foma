@@ -14,7 +14,7 @@ ROOT = Path(os.environ.get('POCKET_ROOT', Path(__file__).resolve().parents[1]))
 WEB = ROOT / 'build/web'
 OUT = ROOT / 'build'
 PKG = OUT / 'pocket-wave-package'
-TOY_URL = 'https://raw.githubusercontent.com/patrickchristianandrews/RandomCandyLand.com/main/public/pocket-wave/index.html'
+TOY_URL = 'https://raw.githubusercontent.com/patrickchristianandrews/RandomCandyLand.com/main/public/liquid-wave/index.html'
 OWNER_REPO = 'https://github.com/patrickchristianandrews/foma'
 
 def die(msg): raise SystemExit('PACKAGING STOPPED: ' + msg)
@@ -42,7 +42,7 @@ html = html.replace('https://github.com/konsumer/foma', OWNER_REPO)
 heading = ('<h1>Pocket Wave &mdash; FM-1 Installer</h1>'
            '<p><strong>Experimental build, not tested on a real FM-1.</strong> Back up your device and try the Emulator tab first. '
            'This is the native prototype: it does not contain the full browser Studio or play the DX7 banks.</p>'
-           '<p><a href="firmware.fwsc" download>Download the firmware file</a> &middot; <a href="CONTROLS.txt">Controls and limits</a> &middot; '
+           '<p><a href="firmware.fwsc" download>Download the firmware file</a> &middot; <a href="LIQUID-WAVE-USER-GUIDE.md">User guide</a> &middot; <a href="CONTROLS.txt">Controls and limits</a> &middot; '
            '<a href="dx7-banks/index.html">Browse the DX7 bank library</a> &middot; <a href="../browser-toy/index.html">Open the browser toy</a></p>')
 html = sub1(r'<h1>\s*Install on the FM-1\s*</h1>', heading, html, what='installer heading')
 (WEB / 'index.html').write_text(html, encoding='utf-8')
@@ -59,9 +59,12 @@ js = sub1(r"location\.hash \|\| '#emulator'", "location.hash || '#install'", js,
 'KNOB1 tempo. KNOB2 level or step. KNOB3 FM depth, motion, drive, key or step note.\n'
 'KNOB4 tail, section or octave. ALGORITHM changes FM ratio or drum drive. OCT +/- shifts pitch.\n'
 'EDIT + ALGORITHM browses instruments: 36 FM patches per melodic track and 8 kits for Bear. Turn while stopped to audition.\n'
-'SAVE stores patterns and instrument choices while stopped. Knob tweaks are session-only.\n\n'
-'Not included: DX7 playback, the full browser Studio, USB audio, Bluetooth, MIDI clock.\n'
+'SAVE stores the song and instrument choices while stopped. Knob tweaks are session-only.\n'
+'Pair from a Bluetooth MIDI app to play the selected track. See LIQUID-WAVE-USER-GUIDE.md.\n\n'
+'Not included: DX7 playback, the full browser Studio, USB audio, native Wi-Fi, MIDI clock.\n'
 'Back up your device and read the Rescue tab before installing.\n', encoding='utf-8')
+
+shutil.copy2(ROOT / 'docs/LIQUID-WAVE-USER-GUIDE.md', WEB / 'LIQUID-WAVE-USER-GUIDE.md')
 
 # ---- assemble package ----
 if PKG.exists(): shutil.rmtree(PKG)

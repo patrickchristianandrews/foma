@@ -16,6 +16,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Generate original Tidbit room artwork
+        run: |
+          python3 -m venv /tmp/tidbit-art
+          /tmp/tidbit-art/bin/pip install Pillow==11.3.0
+          /tmp/tidbit-art/bin/python tools/generate_tidbit_room.py
+          test -s src/tidbit_room_generated.h
       - run: ./fm1 build
       - uses: actions/upload-pages-artifact@v3
         if: github.event_name != 'pull_request'

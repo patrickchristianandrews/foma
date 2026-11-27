@@ -43,6 +43,7 @@ int ble_forget(void) { return -3; }
 const int32_t *bt_audio_in(void) { return 0; }
 #endif
 
+int battery_bars(void) { return -1; }
 uint32_t millis(void) { return now_ms; }
 uint32_t micros(void) { return now_us; }
 
