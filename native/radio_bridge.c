@@ -53,7 +53,8 @@ static const struct {const char *city,*country;} cities[]={
  {"Mexico City","Mexico"},{"Cape Town","South Africa"},{"Sao Paulo","Brazil"}};
 static unsigned city,station,search_city;
 static int station_valid;
-static int browsing,requested,lookup,active;
+static int browsing,requested,lookup,active,search_started;
+static uint32_t lookup_due,search_since;
 static volatile int volume=85;
 static char url[96],title[32]="Groove Salad",fav_id[12],fav_title[32];
 static const char *notice="";
@@ -96,10 +97,15 @@ void lw_radio_service(void){
   return;
  }
  if(plat_wifi_state()!=WIFI_CONNECTED){mix_on=0;if(radio_st!=RS_OFF)radio_stop();release_buffers();notice="CONNECT WI-FI FIRST";return;}
- if(rgn_state==2&&search_city==city&&!lookup)station_valid=1;
- if(lookup&&!radio_net_running()&&rgn_state!=1){
+ if(search_started&&rgn_state!=1){
+  search_started=0;
+  if(rgn_state==2&&search_city==city&&!lookup&&rgn_n){station_valid=1;notice="";}
+  else if(!lookup){station_valid=0;notice=rgn_state==3?rgn_why:"NO STATIONS - PLAY DIRECT";}
+ }
+ if(search_started&&plat_ms()-search_since>35000u)notice="SEARCH SLOW - WAIT / RETRY";
+ if(lookup&&(int32_t)(plat_ms()-lookup_due)>=0&&!radio_net_running()&&rgn_state!=1){
   lookup=0;station_valid=0;search_city=city;
-  if(rgn_start(cities[city].city,cities[city].country)!=0){notice="STATION SEARCH FAILED";}else notice="";
+  if(rgn_start(cities[city].city,cities[city].country)!=0){notice="SEARCH FAILED - PLAY DIRECT";}else {notice="";search_started=1;search_since=plat_ms();}
  }
  if(requested&&!lookup&&rgn_state!=1&&!radio_net_running()){
   requested=0;radio_frac=0;radio_play(0);mix_on=radio_st!=RS_ERROR;
@@ -112,22 +118,26 @@ void lw_radio_service(void){
 }
 void lw_radio_leave(void){active=0;requested=lookup=0;mix_on=0;radio_stop();}
 int lw_radio_ui(void){
- fav_load();active=1;int d=encoder(ENC_SELECT),v=encoder(ENC_KNOB1);
+ fav_load();
+ if(!active){active=1;browsing=0;lookup=1;lookup_due=plat_ms();notice="";}
+ int d=encoder(ENC_SELECT),v=encoder(ENC_KNOB1);
  if(v){volume+=v*3;if(volume<0)volume=0;if(volume>100)volume=100;}
  if(button_pressed(BTN_SEL)){browsing=!browsing;}
  if(d){if(browsing){int n=(int)(sizeof cities/sizeof cities[0]);city=(unsigned)(((int)city+d%n+n)%n);station=0;station_valid=0;notice="EDIT TO SEARCH CITY";}else if(station_valid&&rgn_state==2&&rgn_n){int n=(int)rgn_n;station=(unsigned)(((int)station+d%n+n)%n);}}
- if(button_pressed(BTN_EDIT)){mix_on=0;radio_stop();requested=0;lookup=1;browsing=0;station=0;station_valid=0;notice="";}
+ if(button_pressed(BTN_EDIT)){mix_on=0;radio_stop();requested=0;lookup=1;lookup_due=plat_ms();browsing=0;station=0;station_valid=0;notice="";}
  if(button_pressed(BTN_PLAY)){
   if(radio_st!=RS_OFF&&radio_st!=RS_ERROR){mix_on=0;radio_stop();requested=0;}
   else if(station_valid&&search_city==city&&rgn_state==2&&rgn_list&&station<rgn_n)station_url(rgn_list[station].id,rgn_list[station].title);
-  else if(browsing||lookup||rgn_state==1){notice="WAIT FOR STATIONS";}
+  else if(browsing){browsing=0;lookup=1;lookup_due=plat_ms();notice="";}
+  else if(lookup||rgn_state==1){notice="SEARCHING - EDIT TO RETRY";}
   else {radio_url=fallback;w_cpy(title,"Groove Salad",sizeof title);requested=1;notice="";}
  }
+ if(button_pressed(BTN_GLO)&&rgn_state!=1){mix_on=0;radio_stop();lookup=0;browsing=0;radio_url=fallback;w_cpy(title,"Groove Salad",sizeof title);requested=1;notice="";}
  if(button_pressed(BTN_SAVE)&&radio_st==RS_OFF)fav_save();
  if(button_pressed(BTN_SEQ)&&fav_id[0]){mix_on=0;radio_stop();station_url(fav_id,fav_title);}
  static uint32_t last_draw;
  uint32_t now=plat_ms();
- if(d||v||button_pressed(BTN_SEL)||button_pressed(BTN_EDIT)||button_pressed(BTN_PLAY)||button_pressed(BTN_SAVE)||button_pressed(BTN_SEQ)||now-last_draw>=250u){last_draw=now;return 1;}
+ if(d||v||button_pressed(BTN_SEL)||button_pressed(BTN_EDIT)||button_pressed(BTN_PLAY)||button_pressed(BTN_SAVE)||button_pressed(BTN_SEQ)||button_pressed(BTN_GLO)||now-last_draw>=250u){last_draw=now;return 1;}
  return 0;
 }
 static void label_at(int y,const char *s,uint16_t c){char b[28];w_cpy(b,s,sizeof b);text(8,y,b,c,FONT_SMALL);}
@@ -137,14 +147,14 @@ void lw_radio_draw(void){
  label_at(5,"4 / INTERNET RADIO",cyan);
  label_at(32,cities[city].city,WHITE);
  label_at(50,cities[city].country,WHITE);
- label_at(72,browsing?"SELECT CITY / EDIT SEARCH":rgn_state==1?"SEARCHING STATIONS":rgn_state==3?rgn_why:"SELECT STATION",cyan);
+ label_at(72,browsing?"SELECT CITY / EDIT SEARCH":rgn_state==1?"SEARCHING STATIONS":rgn_state==3?rgn_why:station_valid?"SELECT STATION":"GLO DIRECT RADIO",cyan);
  if(station_valid&&search_city==city&&rgn_state==2&&rgn_list&&station<rgn_n)label_at(91,rgn_list[station].title,WHITE);
  label_at(115,title,WHITE);
  static const char *const states[]={"OFF","CONNECTING","BUFFERING","PLAYING","ERROR"};
  label_at(135,radio_st==RS_ERROR?radio_why:*notice?notice:states[radio_st<5?radio_st:0],cyan);
  char vol[12];format_int(vol,volume);label_at(155,"K1 RADIO VOLUME",WHITE);text(184,155,vol,WHITE,FONT_SMALL);
  label_at(175,"SEL CITY / EDIT SEARCH",WHITE);
- label_at(193,"PLAY / SAVE FAV / SEQ FAV",WHITE);
+ label_at(193,"PLAY / GLO DIRECT / SAVE",WHITE);
  label_at(216,"ARP WIFI / HOME NEXT",cyan);
 }
 void lw_radio_mix(int32_t *lr,uint32_t n,uint32_t gain){
