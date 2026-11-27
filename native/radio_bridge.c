@@ -16,13 +16,30 @@ extern volatile int rgn_state;
 extern char rgn_why[32];
 extern int rgn_start(const char *,const char *);
 #ifdef PLAT_HOST
-/* Host is intentionally offline: it verifies compile and UI, not real network audio. */
+/* Host can replay an MP3 fixture through the real compressed ring/decoder/mixer. No live network. */
+#include <stdio.h>
+#include <stdlib.h>
+extern volatile uint32_t radio_rd,radio_wr;
+static FILE *fixture;
+static uint8_t *fixture_ring;
+static uint32_t fixture_size;
+static void fixture_pump(void){
+ if(!fixture)return;
+ uint32_t free_bytes=fixture_size-(radio_wr-radio_rd);
+ while(free_bytes){uint32_t at=radio_wr%fixture_size,chunk=fixture_size-at;if(chunk>free_bytes)chunk=free_bytes;
+ size_t n=fread(fixture_ring+at,1,chunk,fixture);if(!n){rewind(fixture);n=fread(fixture_ring+at,1,chunk,fixture);if(!n)break;}
+ radio_wr+=(uint32_t)n;free_bytes-=(uint32_t)n;}
+}
 volatile int radio_net_state,radio_net_aac;
 volatile uint32_t radio_rd,radio_wr;
 char radio_net_why[32],radio_net_name[48];
-int radio_net_start(const char *u,uint8_t *p,uint32_t n){(void)u;(void)p;(void)n;return -1;}
-void radio_net_stop(void){}
-int radio_net_running(void){return 0;}
+int radio_net_start(const char *u,uint8_t *p,uint32_t n){
+ (void)u;const char *file=getenv("LW_RADIO_FIXTURE");if(!file||fixture)return -1;
+ fixture=fopen(file,"rb");if(!fixture)return -1;
+ fixture_ring=p;fixture_size=n;radio_rd=radio_wr=0;radio_net_aac=0;radio_net_state=RN_STREAMING;fixture_pump();return 0;
+}
+void radio_net_stop(void){if(fixture){fclose(fixture);fixture=0;}fixture_ring=0;fixture_size=0;radio_net_state=RN_IDLE;}
+int radio_net_running(void){return fixture!=0;}
 lw_station *rgn_list;
 volatile uint32_t rgn_n;
 volatile int rgn_state;
@@ -87,6 +104,9 @@ void lw_radio_service(void){
  if(requested&&!lookup&&rgn_state!=1&&!radio_net_running()){
   requested=0;radio_frac=0;radio_play(0);mix_on=radio_st!=RS_ERROR;
  }
+ #ifdef PLAT_HOST
+ fixture_pump();
+ #endif
  radio_poll();
  if(radio_st==RS_ERROR){mix_on=0;radio_net_stop();if(!radio_net_running()){dec_drop();release_buffers();}}
 }
