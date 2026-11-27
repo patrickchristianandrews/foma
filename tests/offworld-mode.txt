@@ -17,6 +17,20 @@ turn PRESET 1
 expect offworld_preset 1
 tap FX
 expect offworld_scene 1
+tap FX
+expect offworld_scene 2
+tap FX
+expect offworld_scene 3
+tap FX
+expect offworld_scene 4
+tap FX
+expect offworld_scene 5
+tap FX
+expect offworld_scene 6
+tap FX
+expect offworld_scene 7
+tap FX
+expect offworld_scene 0
 tap PLAY
 expect offworld_drone 1
 tapkey w1

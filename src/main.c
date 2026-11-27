@@ -769,6 +769,14 @@ static void stage_plane(uint32_t now){
  }
 }
 static void boot_wave(uint32_t elapsed) {
+#if defined(FOMA_NATIVE_WIFI) && FOMA_NATIVE_WIFI
+ extern void lw_neon_boot_draw(uint32_t,uint32_t);
+ static int previous_frame=-1;
+ int frame_id=(int)(elapsed/45u);
+ if(frame_id==previous_frame)return;
+ previous_frame=frame_id;
+ lw_neon_boot_draw(elapsed,BOOT_WAVE_MS);
+#else
  static int previous=-1;
  if (previous<0) {
   text(32,72,"LIQUID WAVE",RGB(190,120,255),FONT_BIG);
@@ -787,6 +795,7 @@ static void boot_wave(uint32_t elapsed) {
   }
  }
  previous=front;
+#endif
 }
 /* LCD adaptations of RandomCandyLand Liquid Wave's character shapes and palette.
  * Bass Cat belongs on the stage; Tidbit's weather room has no cat. */
