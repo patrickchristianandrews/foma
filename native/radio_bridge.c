@@ -90,9 +90,10 @@ static volatile int weather_job;
 static int weather_place=-2;
 static uint32_t weather_next;
 static LiquidWeather weather_result;
+static int weather_clock_result=-1;
 static char weather_error[32];
 #ifndef PLAT_HOST
-extern int lw_net_json(char *,unsigned,char *,unsigned,char *);
+extern int lw_net_json(char *,unsigned,char *,unsigned,char *,int *);
 static void weather_worker(void *arg){
  (void)arg;
  char urlbuf[200]="https://api.open-meteo.com";
@@ -100,8 +101,10 @@ static void weather_worker(void *arg){
  char *json=malloc(2048);
  int ok=0;
  if(json&&liquid_weather_request((unsigned)weather_place,urlbuf+prefix,sizeof urlbuf-prefix)){
-  int n=lw_net_json(urlbuf,sizeof urlbuf,json,2048,weather_error);
-  if(n>0)ok=liquid_weather_parse(json,(unsigned)n,&weather_result);
+  int utc=-1;
+  int n=lw_net_json(urlbuf,sizeof urlbuf,json,2048,weather_error,&utc);
+  weather_clock_result=-1;
+  if(n>0){ok=liquid_weather_parse(json,(unsigned)n,&weather_result);weather_clock_result=liquid_weather_clock(json,(unsigned)n,utc);}
  }
  free(json);
  RING_PUBLISH();
@@ -119,7 +122,7 @@ void lw_weather_service(void){
  if(weather_job==2||weather_job==3){
   int ok=weather_job==2;
   RING_PUBLISH();
-  if(ok)liquid_weather_accept((unsigned)weather_place,&weather_result);
+  if(ok)liquid_weather_accept_clock((unsigned)weather_place,&weather_result,weather_clock_result);
   weather_next=now+(ok?600000u:30000u);
   weather_job=0;
  }
