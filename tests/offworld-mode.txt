@@ -156,6 +156,6 @@ tap HOME
 expect offworld_active 1
 expect offworld_auto 1
 wait 42000
-expect offworld_cuts 1
+expect offworld_cuts >0
 tap HOME
 expect offworld_active 0

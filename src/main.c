@@ -937,7 +937,7 @@ static int stage_singing(int i,uint32_t now){
 static void swimmer_step(int i,uint32_t now){
  Face *a=&f[i];
  #if defined(FOMA_NATIVE_WIFI) && FOMA_NATIVE_WIFI
- if(stageHit[i]!=active[i]){stageHit[i]=active[i];if((int32_t)(active[i]-now)>0&&!(p.mute&(1<<i)))stageLeap[i]=now;}
+ if(stageHit[i]!=active[i]){stageHit[i]=active[i];if((int32_t)(active[i]-now)>0&&!(p.mute&(1<<i))&&(!stageLeap[i]||now-stageLeap[i]>=650u))stageLeap[i]=now;}
  int leaping=stageLeap[i]&&now-stageLeap[i]<720u&&!(p.mute&(1<<i));
  if(stage_singing(i,now)||leaping){
  #else

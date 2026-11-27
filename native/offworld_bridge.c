@@ -332,7 +332,7 @@ static void alien_draw(uint32_t now){
   int x=7+(int)((q+(now/35u)*2u)%222u),y=50+(int)(((q>>8)+now/13u)%38u);line(x,y,x-2,y+4,RGB(86,120,155));}
  /* Original-style tape tearing during cuts, using the existing framebuffer. */
  uint32_t since=now-cut_at;
- if(cut_count&&since<360u){
+ if(!event_kind&&cut_count&&since<360u){
   for(int i=0;i<5;i++){unsigned h=world_hash(film_seed+since/40u*37u+(unsigned)i);int y=46+(int)(h%78u),d=(int)((h>>8)%29u)-14;
    for(int j=0;j<5;j++)lw_neon_shift_row(y+j,4,232,d);
   }
