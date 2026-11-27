@@ -2,7 +2,7 @@ name: Wi-Fi firmware three-part safety audit
 on:
   push:
     branches: [liquid-wave-fm1-development]
-    paths: ['native/**', 'tests/native-*.txt', '.github/workflows/wifi-audit.yml', '.github/workflows/native-wifi.yml']
+    paths: ['native/**', 'src/**', 'tools/generate_tidbit_room.py', 'tests/native-*.txt', '.github/workflows/wifi-audit.yml', '.github/workflows/native-wifi.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -76,6 +76,7 @@ jobs:
           git -C /tmp/radio checkout 494c2a655f4cf3bd5130886133b6ab67103c6bf9
           python3 native/prepare-radio.py /tmp/radio
           python3 -m pip install --break-system-packages Pillow
+          python3 tools/generate_tidbit_room.py
           python3 /tmp/base/tools/build.py "$GITHUB_WORKSPACE/native" --host
           mkdir -p /tmp/out
       - name: Sound and save failures
