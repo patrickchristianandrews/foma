@@ -802,9 +802,13 @@ static void swimmer_step(int i,uint32_t now){
  Face *a=&f[i];
  if(stage_singing(i,now)){
   int bob=sine(now*260000u+(uint32_t)i*536870912u)>>14;
-  /* Singing performers stay entirely above the highest local wave. */
-  a->y=surface_at(a->x+12,now)-25+bob;
-  if(now/170u%2u==0)a->x+=a->vx;
+  /* Hover in two rows just below the plane's banner, clear of water. */
+  int target=92+(i/4)*21+bob;
+  int lane=8+(i%4)*55;
+  a->y+=clamp(target-a->y,-12,12);
+  /* On entry, clear the water immediately rather than singing submerged. */
+  if(a->y>surface_at(a->x+12,now)-22)a->y=surface_at(a->x+12,now)-22;
+  a->x+=clamp(lane-a->x,-4,4);
   if(a->x<8){a->x=8;a->vx=1;}
   if(a->x>208){a->x=208;a->vx=-1;}
   swimDuration[i]=0;
@@ -1594,7 +1598,7 @@ void loop(void){
  /* Clear old silhouettes and wakes before compositing the next ocean frame. */
  for(int j=0;j<NC;j++){
   Face *a=&f[j];int x=clamp(a->ox-11,0,239),w=clamp(46,1,240-x);
-  int top=clamp(a->oy-3,91,137);
+  int top=clamp(a->oy-3,90,137);
   if(top<137)rect(x,top,w,137-top,BLACK);
   rect(x,125,w,12,BLACK);
  }
