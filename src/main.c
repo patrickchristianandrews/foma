@@ -792,8 +792,8 @@ static void boot_wave(uint32_t elapsed) {
  * Bass Cat belongs on the stage; Tidbit's weather room has no cat. */
 #if defined(FOMA_NATIVE_WIFI) && FOMA_NATIVE_WIFI
 static int portrait_large,portrait_x,portrait_y;
-static int px5(int x){return portrait_x+(x-portrait_x)*5/4;}
-static int py5(int y){return portrait_y+(y-portrait_y)*5/4;}
+static int px5(int x){return portrait_x+(x-portrait_x)*3/2;}
+static int py5(int y){return portrait_y+(y-portrait_y)*3/2;}
 static void portrait_rect(int x,int y,int w,int h,uint16_t c){
  if(!portrait_large){rect(x,y,w,h,c);return;}
  rect(px5(x),py5(y),px5(x+w)-px5(x),py5(y+h)-py5(y),c);
@@ -890,9 +890,14 @@ static void surface_patch(int x,int w){
   if(((k/4+(int)(now/240u))%13)==0)line(k,176,k+n-1,176,RGB(42,124,157));
  }
 }
+#if defined(FOMA_NATIVE_WIFI) && FOMA_NATIVE_WIFI
+enum { STAGE_CENTER=18, STAGE_HEIGHT=30, STAGE_MAX_X=199, STAGE_ROW_Y=84, STAGE_ROW_GAP=27, STAGE_CLEAR_TOP=82 };
+#else
+enum { STAGE_CENTER=12, STAGE_HEIGHT=22, STAGE_MAX_X=208, STAGE_ROW_Y=92, STAGE_ROW_GAP=24, STAGE_CLEAR_TOP=90 };
+#endif
 static void faceDraw(int i){
  Face *a=&f[i];
- int water=surface_at(a->x+12,millis());
+ int water=surface_at(a->x+STAGE_CENTER,millis());
  if(a->y<water){
 #if defined(FOMA_NATIVE_WIFI) && FOMA_NATIVE_WIFI
   portrait_large=1;
@@ -900,8 +905,8 @@ static void faceDraw(int i){
   portrait_at(i,a->x,a->y);
 #if defined(FOMA_NATIVE_WIFI) && FOMA_NATIVE_WIFI
   portrait_large=0;
-  int lower=a->y+24-water;
-  if(lower>0){rect(a->x-1,water,33,lower,SURF_COLOR);line(a->x-1,water,a->x+30,water,RGB(124,211,233));}
+  int lower=a->y+STAGE_HEIGHT-water;
+  if(lower>0){rect(a->x-2,water,40,lower,SURF_COLOR);line(a->x-2,water,a->x+37,water,RGB(124,211,233));}
 #else
   int lower=a->y+19-water;
   if(lower>0){rect(a->x-1,water,26,lower,SURF_COLOR);line(a->x-1,water,a->x+24,water,RGB(124,211,233));}
@@ -917,14 +922,14 @@ static void swimmer_step(int i,uint32_t now){
  if(stage_singing(i,now)){
   int bob=sine(now*260000u+(uint32_t)i*536870912u)>>14;
   /* Hover in two rows just below the plane's banner, clear of water. */
-  int target=92+(i/4)*24+bob;
+  int target=STAGE_ROW_Y+(i/4)*STAGE_ROW_GAP+bob;
   int lane=8+(i%4)*55;
   a->y+=clamp(target-a->y,-12,12);
   /* On entry, clear the water immediately rather than singing submerged. */
-  if(a->y>surface_at(a->x+12,now)-27)a->y=surface_at(a->x+12,now)-22;
+  if(a->y>surface_at(a->x+STAGE_CENTER,now)-STAGE_HEIGHT)a->y=surface_at(a->x+STAGE_CENTER,now)-STAGE_HEIGHT;
   a->x+=clamp(lane-a->x,-4,4);
   if(a->x<8){a->x=8;a->vx=1;}
-  if(a->x>208){a->x=208;a->vx=-1;}
+  if(a->x>STAGE_MAX_X){a->x=STAGE_MAX_X;a->vx=-1;}
   swimDuration[i]=0;
   return;
  }
@@ -938,9 +943,10 @@ static void swimmer_step(int i,uint32_t now){
  uint32_t age=now-swimSince[i],duration=swimDuration[i];
  unsigned progress=(unsigned)(age*256u/duration);
  int arc=clamp(sine(progress<<23),0,32767);
- int water=surface_at(a->x+12,now);
+ int water=surface_at(a->x+STAGE_CENTER,now);
  int bob=sine(now*260000u+(uint32_t)i*536870912u)>>13;
- int target=water-16+bob,dx=0;
+ int rise=STAGE_HEIGHT-22;
+ int target=water-16-rise+bob,dx=0;
  switch(swimMode[i]){
   case SWIM_FLOAT: target=water-16+bob;dx=(now/200u+i)%2==0?1:0;break;
   case SWIM_PADDLE: target=water-12+bob;dx=1;break;
@@ -951,14 +957,14 @@ static void swimmer_step(int i,uint32_t now){
  }
  a->x+=a->vx*dx;
  if(a->x<8){a->x=8;a->vx=1;}
- if(a->x>208){a->x=208;a->vx=-1;}
- a->y+=clamp(target-a->y,-3,3);
+ if(a->x>STAGE_MAX_X){a->x=STAGE_MAX_X;a->vx=-1;}
+ a->y+=clamp(target-rise-a->y,-3,3);
 }
 static void stage_splash(int i,uint32_t now){
  if(stage_singing(i,now))return;
- Face *a=&f[i];int cx=a->x+12,water=surface_at(cx,now);
+ Face *a=&f[i];int cx=a->x+STAGE_CENTER,water=surface_at(cx,now);
  uint32_t age=now-swimSince[i];unsigned t=(age/80u)%10u;
- int mode=swimMode[i],cross=a->y+9-water;
+ int mode=swimMode[i],cross=a->y+STAGE_HEIGHT/2-water;
  if(mode==SWIM_SURF){
   int tail=clamp(cx-a->vx*15,0,239);
   line(tail,water+2,cx,water-1,RGB(222,249,255));
@@ -1749,7 +1755,7 @@ void loop(void){
  /* Clear old silhouettes and wakes before compositing the next ocean frame. */
  for(int j=0;j<NC;j++){
   Face *a=&f[j];int x=clamp(a->ox-11,0,239),w=clamp(55,1,240-x);
-  int top=clamp(a->oy-3,90,137);
+  int top=clamp(a->oy-3,STAGE_CLEAR_TOP,137);
   if(top<137)rect(x,top,w,137-top,BLACK);
   rect(x,125,w,12,BLACK);
  }
