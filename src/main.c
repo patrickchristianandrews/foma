@@ -461,6 +461,23 @@ static void weather_generate(uint32_t now){
  weather.step=0;
 }
 
+#if defined(FOMA_NATIVE_WIFI) && FOMA_NATIVE_WIFI
+/* Weather Room has its own Tidbit patch; changing it never edits a song preset.
+ * All 27 physical keys play chromatically through Tidbit's existing FM voice. */
+static int room_patch=9;
+static uint32_t room_key_until;
+static void room_tidbit_note(int midi_note){
+ const Instrument *patch=&instruments[room_patch];
+ Event e={vb[7],patch->tail,0,patch->ratio,
+  note_inc(clamp(midi_note+patch->shift,0,127)),patch->level*160,patch->depth,0};
+ active[7]=millis()+240u;
+ enqueue(e);
+}
+static int room_tidbit_active(uint32_t now){
+ return keys()!=0||(int32_t)(room_key_until-now)>0||
+ ((int32_t)(active[7]-now)>0&&!(p.mute&(1u<<7)));
+}
+#endif
 static void weather_transport(uint32_t now){
  if(!weather.playing||(int32_t)(now-weather.nextStep)<0)return;
  if(!weather.step){
@@ -478,6 +495,12 @@ static void weather_transport(uint32_t now){
    if(note)sound_at_root(ch,note,root,part,weather.music.style,100);
   }else if(note!=EMPTY){
    int gain=ch==3?weather.music.lead_level:ch==4?weather.music.pad_level:100;
+#if defined(FOMA_NATIVE_WIFI) && FOMA_NATIVE_WIFI
+   if(ch==7){
+    if(!keys()&&(int32_t)(now-room_key_until)>=0)
+     room_tidbit_note(60+root+degree(note+chord,weather.music.style));
+   }else
+#endif
    sound_at_root(ch,note+chord,root,part,weather.music.style,gain);
   }
  }
@@ -560,7 +583,12 @@ static void weather_hud(uint32_t now){
  /* Actual website mascot, rendered at native room resolution rather than
   * enlarging the tiny sequencer portrait. Gentle note-driven bob. */
 #ifdef TIDBIT_ROOM_HIRES
+#if defined(FOMA_NATIVE_WIFI) && FOMA_NATIVE_WIFI
+ int room_hit=room_tidbit_active(now);
+ int bob=room_hit?3+((now/65u)%2u)*3:0;
+#else
  int bob=(int32_t)(active[7]-now)>0 && !(p.mute&(1<<7))?2:0;
+#endif
  for(int y=0;y<80;y++)for(int x=0;x<80;x++){
   uint16_t c=tidbitRoomPortrait[y*80+x];
   if(c)pixel(96+x,70+y-bob,c);
@@ -570,7 +598,23 @@ static void weather_hud(uint32_t now){
   uint16_t c=tidbitPortrait[y*24+x];
   if(c)rect(98+x*3,96+y*3,3,3,c);
  }
+#if defined(FOMA_NATIVE_WIFI) && FOMA_NATIVE_WIFI
+ tidbit_mouth(98,96,3,room_tidbit_active(now),now);
+#else
  tidbit_mouth(98,96,3,(int32_t)(active[7]-now)>0 && !(p.mute&(1<<7)),now);
+#endif
+#endif
+#if defined(FOMA_NATIVE_WIFI) && FOMA_NATIVE_WIFI
+ if(room_tidbit_active(now)){
+  /* Music-note accents rise beside the intact full-body sprite. */
+  for(int i=0;i<2;i++){
+   int x=i?182:83,y=111-(int)((now/35u+i*11u)%29u);
+   rect(x,y,5,4,peach);line(x+4,y,x+4,y-8,peach);line(x+4,y-8,x+8,y-6,peach);
+  }
+ }
+ rect(60,154,171,15,RGB(49,30,49));
+ text(64,154,"ALGO",purple,FONT_SMALL);
+ text(106,154,instruments[room_patch].name,WHITE,FONT_SMALL);
 #endif
  /* Plant, record player, mug and books. */
  rect(199,136,17,14,purple);
@@ -1381,12 +1425,22 @@ void loop(void){
    if(button_pressed(BTN_ENV))ambientLevel=ambientLevel?0:35;
    if(button_pressed(BTN_LFO))animalLevel=animalLevel?0:45;
    if(button_pressed(BTN_SEL)){if(!animalLevel)animalLevel=45;animalTrigger=1;}
+#if defined(FOMA_NATIVE_WIFI) && FOMA_NATIVE_WIFI
+   wd=encoder(ENC_ALGORITHM);
+   if(wd){room_patch=wrap(room_patch+wd,COUNT(instruments));lastHud=now-1000u;}
+   for(int k=0;k<KEY_COUNT;k++)if(key_pressed(k)){
+    room_key_until=now+300u;
+    room_tidbit_note(KEY_FIRST_NOTE+k);
+    lastHud=now-1000u;
+   }
+#else
    if(weather.playing){
     static const int8_t whiteKey[]={0,-1,1,-1,2,-1,3,4,-1,5,-1,6};
     int root=weather.harmony.root+weather.music.transpose;
     for(int k=0;k<KEY_COUNT;k++)if(key_pressed(k)&&whiteKey[k%12]>=0)
      sound_at_root(3,whiteKey[k%12]+7*(k/12),root,0,weather.music.style,100);
    }
+#endif
    weather_transport(now);
    int catchup=0;
    while(playing && (int32_t)(now-due)>=0 && catchup++<4){
@@ -1397,6 +1451,10 @@ void loop(void){
    panel_lights(now);
    return;
   }
+#if defined(FOMA_NATIVE_WIFI) && FOMA_NATIVE_WIFI
+  room_key_until=0;
+  {Event e={vb[7],0,128,0,0,0,0,0};enqueue(e);}
+#endif
   if(weather.playing)releaseRequested=1;
   ambientLevel=animalLevel=animalTrigger=0;
   weather.playing=0;
