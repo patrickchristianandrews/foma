@@ -58,3 +58,40 @@ s=s.replace("        if (dec_use(radio_mode != 2 && radio_net_aac ? 2 : 1)) {","
         }
         if (dec_use(1)) {""")
 (dest/"radio_core.c").write_text(s)
+
+
+# Reuse the existing network transport on the same worker budget. The result
+# buffer is owned by the weather worker, not the audio callback.
+net=dest/"net/radio_net.c"
+with net.open("a") as f:
+    f.write(r"""
+/* Bounded public JSON request; caller serializes all radio/weather tasks. */
+int lw_net_json(char *url, unsigned url_cap, char *out, unsigned cap, char *why)
+{
+    conn_t c = {-1, 0, 0, why};
+    int rc, got, tries;
+    unsigned used=0;
+    uint32_t start=shim_ms();
+    if(cap<2)return -1;
+    why[0]=0;
+    for(tries=0;tries<3;tries++){
+        rc=http_open(&c,url,url_cap,1);
+        if(rc!=1)break;
+    }
+    if(rc!=0)return -1;
+    while(used<cap-1 && shim_ms()-start<15000u){
+        got=conn_read(&c,out+used,cap-1-used);
+        if(got<=0)break;
+        used+=(unsigned)got;
+    }
+    conn_close(&c);
+    out[used]=0;
+    /* Require a complete JSON object, not a prefix of an overlong response. */
+    while(used && (out[used-1]==' '||out[used-1]=='\n'||out[used-1]=='\r'||out[used-1]=='\t'))used--;
+    if(!used||out[0]!='{'||out[used-1]!='}'||used>=cap-1){
+        if(!why[0])why_to(why,"weather response");
+        return -1;
+    }
+    return (int)used;
+}
+""")
