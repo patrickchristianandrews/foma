@@ -21,6 +21,18 @@ static uint32_t retry_at;
 static int preset,octave,drone,epic,memory,scene,tone,vib;
 static uint8_t macros[4];
 static uint32_t latched;
+/* Main-loop-only encounter state; no framebuffer or audio allocations. */
+static uint32_t event_at,event_next,event_count;
+static int event_kind,event_x;
+static unsigned world_hash(unsigned n);
+static void event_reset(uint32_t now){event_kind=0;event_at=now;event_next=now+12000u+world_hash(now+scene)%16000u;}
+static void event_start(uint32_t now,int key){
+ if(event_kind && now-event_at<2200u)return;
+ /* First note in each world triggers its signature event. Subsequent notes
+  * can trigger another encounter after the current animation completes. */
+ event_at=now;event_kind=1+scene;event_x=45+(int)(world_hash(now+(unsigned)key*37u)%150u);event_count++;
+ event_next=now+12000u+world_hash(now+event_count)%16000u;
+}
 static const uint8_t knobs[]={ENC_KNOB1,ENC_KNOB2,ENC_KNOB3,ENC_KNOB4};
 static int bound(int x,int low,int high){return x<low?low:x>high?high:x;}
 static void set_mode(int v){uint32_t flags=plat_lock();mode=v;plat_unlock(flags);}
@@ -33,13 +45,13 @@ void lw_offworld_enter(void){
  lw_offworld_echo_suspend();
  if(!lw_offworld_alloc()){init_error=2;lw_offworld_echo_resume();return;}
  octave=drone=epic=memory=scene=tone=0;vib=38;latched=0;
- select_preset(0);eng_world(0,0.25f);
+ select_preset(0);eng_world(0,0.25f);event_count=0;event_reset(millis());
  set_mode(2);
 }
 void lw_offworld_leave(void){
  int was=mode;set_mode(1);
  if(was==2){lw_offworld_free();lw_offworld_echo_resume();}
- init_error=0;set_mode(0);
+ init_error=0;event_kind=0;set_mode(0);
 }
 int lw_offworld_render(int32_t *lr,uint32_t n,uint32_t gain){
  if(!mode)return 0;
@@ -61,9 +73,13 @@ void lw_offworld_input(void){
  if(button_pressed(BTN_PLAY)){drone=!drone;eng_all_off();latched=0;}
  if(button_pressed(BTN_ARP)){epic=!epic;eng_all_off();latched=0;}
  if(button_pressed(BTN_REC)){memory=!memory;eng_memory(memory);}
- if(button_pressed(BTN_FX)){scene=(scene+1)%NWORLD;eng_world(scene,0.25f);}
+ uint32_t now=millis();
+ if(button_pressed(BTN_FX)){scene=(scene+1)%NWORLD;eng_world(scene,0.25f);event_reset(now);}
+ if(event_kind&&now-event_at>=2200u)event_kind=0;
+ if(!event_kind&&(int32_t)(now-event_next)>=0)event_start(now,scene);
  for(int k=0;k<KEY_COUNT;k++){
   if(key_pressed(k)){
+   event_start(now,k);
    if(drone&&!(keys()&~(1u<<k))){eng_all_off();latched=0;}
    int p=KEY_FIRST_NOTE+k+octave*12;
    eng_note_on(k,(float)p,0.8f);
@@ -75,7 +91,7 @@ void lw_offworld_input(void){
  }
  uint8_t st,a,b;
  while(midi_read(&st,&a,&b)){
-  if((st&0xf0)==0x90&&b)eng_note_on(128+a,(float)a,(float)b/127.0f);
+  if((st&0xf0)==0x90&&b){event_start(now,a);eng_note_on(128+a,(float)a,(float)b/127.0f);}
   else if((st&0xf0)==0x80||((st&0xf0)==0x90&&!b))eng_note_off(128+a);
  }
 }
@@ -124,6 +140,53 @@ static void saucer(int x,int y,uint32_t now,uint16_t ink,int pulse,int floor){
 static void stars(uint32_t now,int top,int span,int seed,uint16_t ink){
  for(int i=0;i<26;i++){unsigned h=world_hash((unsigned)(i+seed*31+7));
   pixel(8+(int)(h%222u),top+(int)((h>>12)%(unsigned)span),((now/300u+i)%5u==0)?ink:RGB(150,160,190));}
+}
+/* Small moving props remain inside the 240x240 screen. */
+static void flying_car(int x,int y,uint16_t ink){
+ rect(x-7,y,15,3,ink);rect(x-3,y-2,7,2,WHITE);
+ pixel(x-6,y+3,WHITE);pixel(x+6,y+3,WHITE);
+}
+static void creature(int x,int y,uint32_t now,uint16_t ink){
+ orb(x,y-4,4,ink);rect(x-3,y,7,6,ink);
+ pixel(x-2,y-5,BLACK);pixel(x+2,y-5,BLACK);
+ int step=(int)((now/140u)%2u);
+ line(x-2,y+5,x-4+step*3,y+8,ink);line(x+2,y+5,x+4-step*3,y+8,ink);
+}
+static void encounter_draw(uint32_t now,int ship,int sy,uint16_t ink){
+ if(!event_kind)return;
+ uint32_t age=now-event_at;if(age>=2200u)return;
+ int x=event_x,up=(int)(age*43u/2200u),y=119-up;
+ switch(event_kind){
+ case 1: /* abduct a vehicle */
+  flying_car(ship,y,WHITE);break;
+ case 2: /* abduct an alien from the forest */
+  creature(ship,y-6,now,ink);break;
+ case 3: /* meteor shower */
+  for(int i=0;i<4;i++){int mx=12+(int)((age/9u+i*51u)%205u),my=50+(int)((age/32u+i*9u)%35u);
+   line(mx,my,mx-8,my+6,WHITE);line(mx-8,my+6,mx-16,my+12,ink);}
+  break;
+ case 4: /* levitating crystal */
+  line(ship,y-7,ship-5,y,WHITE);line(ship-5,y,ship,y+7,ink);
+  line(ship,y+7,ship+5,y,ink);line(ship+5,y,ship,y-7,WHITE);break;
+ case 5: /* lightning over volcano */
+  if((age/130u)%3u==0){line(x,49,x-10,66,WHITE);line(x-10,66,x+5,76,ink);line(x+5,76,x-4,104,WHITE);}
+  for(int i=0;i<5;i++)pixel(x-12+i*6,105-(int)((age/30u+i*5u)%25u),ink);
+  break;
+ case 6: /* passing spacecraft and signal pulse */
+  flying_car(15+(int)(age*205u/2200u),87,WHITE);
+  for(int i=0;i<3;i++){int r=3+(int)((age/65u+i*5u)%15u);
+   line(x-r,91-r,x+r,91-r,ink);line(x-r,91+r,x+r,91+r,ink);}
+  break;
+ case 7: /* opening portal */
+  {int r=4+(int)((age<1100u?age:2200u-age)/90u);
+   orb(x,102,r,ink);orb(x,102,r>3?r-3:1,BLACK);creature(x,103,now,WHITE);}
+  break;
+ case 8: /* ice comet and visitor */
+  {int mx=210-(int)(age*180u/2200u),my=56+(int)(age*29u/2200u);
+   line(mx,my,mx+18,my-5,ink);orb(mx,my,3,WHITE);creature(x,117,now,ink);}
+  break;
+ }
+ (void)sy;
 }
 static void alien_draw(uint32_t now){
  static const uint16_t sky[NWORLD]={RGB(12,14,48),RGB(12,42,25),RGB(30,9,48),RGB(6,32,55),RGB(52,14,10),RGB(15,22,43),RGB(34,11,36),RGB(10,28,50)};
@@ -180,7 +243,15 @@ static void alien_draw(uint32_t now){
  }
  int travel=(int)((now/38u)%320u),ship=35+(travel>160?320-travel:travel);
  int bob=(int)((now/160u)%8u),sy=59+(bob>4?8-bob:bob);
- saucer(ship,sy,now,ink,(latched||pulse>3)?pulse+1:0,119);
+ /* Ambient traffic and ground life animate even when no keys are held. */
+ if(scene==0||scene==2||scene==5){
+  int car=14+(int)((now/24u)%210u);flying_car(car,99-(int)((now/400u)%3u),ink);
+  flying_car(224-(int)((now/33u)%210u),110,WHITE);
+ }
+ if(scene==1||scene==6||scene==7){int cx=14+(int)((now/70u)%210u);creature(cx,119,now,ink);}
+ int abduct=event_kind==1||event_kind==2||event_kind==4;
+ saucer(ship,sy,now,ink,abduct?20:((latched||pulse>3)?pulse+1:0),119);
+ encounter_draw(now,ship,sy,ink);
  for(int i=0;i<macros[3]/8;i++){unsigned q=world_hash((unsigned)i+scene*91u);
   int x=7+(int)((q+(now/35u)*2u)%222u),y=50+(int)(((q>>8)+now/13u)%38u);line(x,y,x-2,y+4,RGB(86,120,155));}
  frame(3,45,234,93,ink);
@@ -211,7 +282,7 @@ void lw_offworld_draw(void){
  text(8,28,names[preset],pink,FONT_SMALL);
  alien_draw(millis());
  text(8,140,worlds[scene],neon,FONT_SMALL);
- text(150,140,"FX: WORLD",WHITE,FONT_SMALL);
+ text(150,140,event_kind?"ENCOUNTER":"FX: WORLD",event_kind?pink:WHITE,FONT_SMALL);
  for(int i=0;i<4;i++){
   int x=5+i*59;char val[12];format_int(val,macros[i]);
   text(x,156,labels[i],WHITE,FONT_SMALL);
@@ -232,6 +303,8 @@ int lw_offworld_expect(const char *name,int *v){
  else if(!strcmp(name,"offworld_scene"))*v=scene;
  else if(!strcmp(name,"offworld_preset"))*v=preset;
  else if(!strcmp(name,"offworld_drone"))*v=drone;
+ else if(!strcmp(name,"offworld_event"))*v=event_kind;
+ else if(!strcmp(name,"offworld_events"))*v=(int)event_count;
  else return 0;return 1;
 }
 #endif

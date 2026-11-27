@@ -12,11 +12,17 @@ peakreset
 tapkey w0
 wait 1000
 expect offworld_notes 1
+expect offworld_event 1
+expect offworld_events 1
 expect peak_db_min -55
 turn PRESET 1
 expect offworld_preset 1
 tap FX
 expect offworld_scene 1
+expect offworld_event 0
+tapkey w2
+expect offworld_event 2
+expect offworld_events 2
 tap FX
 expect offworld_scene 2
 tap FX
@@ -29,6 +35,8 @@ tap FX
 expect offworld_scene 6
 tap FX
 expect offworld_scene 7
+tapkey w3
+expect offworld_event 8
 tap FX
 expect offworld_scene 0
 tap PLAY
