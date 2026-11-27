@@ -93,22 +93,31 @@ static const char *const backing_names[]={"OFF","ORBIT PULSE","NEBULA DRIFT","AL
 static const uint8_t backing_roots[4][4]={{9,5,0,7},{0,9,5,7},{9,7,5,7},{0,5,9,7}};
 static const uint16_t backing_ms[]={600,600,720,480,420};
 static int backing_style,backing_beat,backing_root,backing_minor,backing_running;
-static int guide_step,guide_chord,guide_feedback,guide_played,guide_expected;
+static int guide_step,guide_chord,guide_feedback,guide_played,guide_expected,guide_done;
+static uint32_t guide_cut;
 static uint32_t guide_errors;
-static int guide_active(void){return learn_on&&backing_style&&!world_page&&(!lesson||lesson_wait);}
+static int guide_active(void){return learn_on&&backing_style&&!world_page&&!lesson;}
 static int guide_pitch(void){return (backing_root+(guide_step==1?(backing_minor?3:4):guide_step==2?7:0))%12;}
 static uint32_t backing_due,backing_hits,backing_flash,backing_notes;
 static unsigned backing_mask(void){return PC(backing_root)|PC((backing_root+(backing_minor?3:4))%12)|PC((backing_root+7)%12);}
 static unsigned backing_period(void){return lesson&&scene==4?600u:backing_ms[backing_style];}
 static void backing_stop(void){if(backing_running){eng_note_off(300);eng_note_off(301);}backing_running=0;}
-static void backing_restart(uint32_t now){backing_stop();backing_beat=0;backing_due=now;guide_step=guide_chord=guide_feedback=0;}
+static void guide_reset(void){guide_step=guide_chord=guide_feedback=guide_done=0;guide_cut=cut_count;}
+static void backing_restart(uint32_t now){backing_stop();backing_beat=0;backing_due=now;guide_reset();}
 static void backing_tick(uint32_t now){
  if(!backing_style){backing_stop();return;}
+ if(guide_cut!=cut_count){guide_reset();backing_due=now;}
  if((int32_t)(now-backing_due)<0)return;
  int beat=backing_beat++%16,part=beat%4;
  backing_due=now+backing_period();
- if(guide_active()&&guide_step>=3){guide_step=0;guide_chord=(guide_chord+1)%4;part=0;}
- int root=backing_roots[backing_style-1][guide_active()?guide_chord:beat/4];
+ /* A completed chord goes dark, including while its last key is held.
+  * After a short musical break, start the next chord. The final chord
+  * stays dark until a new world, track, or explicit learning restart. */
+ if(guide_active()&&!guide_done&&guide_step>=3&&now-backing_flash>=1200u&&!keys()){
+  if(guide_chord==3)guide_done=1;
+  else {guide_step=0;guide_chord++;guide_feedback=0;part=0;}
+ }
+ int root=backing_roots[backing_style-1][guide_active()&&!guide_done?guide_chord:beat/4];
  if(lesson&&scene==2&&!lesson_wait)root=9;
  if(lesson&&scene==4&&!lesson_wait)root=0;
  if(lesson&&(scene==3||scene==6)&&!lesson_wait){
@@ -124,7 +133,7 @@ static void backing_tick(uint32_t now){
  backing_running=1;
 }
 static void backing_play(uint32_t now,int midi){
- if(!guide_active()||guide_step>=3)return;
+ if(!guide_active()||guide_done||guide_step>=3)return;
  guide_played=midi%12;guide_expected=guide_pitch();backing_flash=now;
  if(guide_played==guide_expected){guide_feedback=1;guide_step++;backing_hits++;}
  else {guide_feedback=-1;guide_errors++;}
@@ -150,7 +159,7 @@ static void lesson_reset_step(void){lesson_step=lesson_wait=lesson_release=lesso
  * learning off never resets an encounter or silences the backing track. */
 static void learning_set(uint32_t now,int enabled){
  learn_on=enabled;lesson=0;world_page=0;lesson_reset_step();
- guide_step=guide_chord=guide_feedback=0;
+ guide_reset();
  cut_due=now+18000u+film_seed%17000u;
 }
 static void lesson_toggle(uint32_t now){
@@ -280,14 +289,19 @@ void lw_offworld_input(void){
    latched|=1u<<k;
   }
   if(key_released(k)&&!drone){eng_note_off(k);eng_note_off(k+32);eng_note_off(k+64);latched&=~(1u<<k);}
-  led_key(k,!!(latched&(1u<<k)));
  }
  lesson_input(now,pressed);
- /* Steady hints in the physical C4-B4 octave. Held keys remain lit. */
- if(learn_on&&((lesson&&!lesson_wait)||guide_active())){
-  unsigned target=lesson&&!lesson_wait?PC(lesson_next_pitch()):guide_step<3?PC(guide_pitch()):0;
-  for(int k=0;k<KEY_COUNT;k++){int midi=KEY_FIRST_NOTE+k;
-   led_key(k,!!(latched&(1u<<k))||(midi>=60&&midi<=71&&(target&PC(midi%12))));}}
+ /* Guide LEDs are NOT performance LEDs. In learning, only the next
+  * required physical key may be on. Completed/held/wrong keys go dark.
+  * Repeated notes get an off/on cycle when the key is released. */
+ int next=-1;
+ if(learn_on&&lesson&&!lesson_wait)next=lesson_next_pitch();
+ else if(guide_active()&&!guide_done&&guide_step<3)next=guide_pitch();
+ int guided=learn_on&&(lesson||guide_active());
+ for(int k=0;k<KEY_COUNT;k++){
+  int midi=KEY_FIRST_NOTE+k;
+  led_key(k,guided?(next>=0&&midi==60+next&&!key_held(k)):!!(latched&(1u<<k)));
+ }
  uint8_t st,a,b;
  while(midi_read(&st,&a,&b)){
   if((st&0xf0)==0x90&&b){if(!lesson)event_start(now,a);backing_play(now,a);eng_note_on(128+a,(float)a,(float)b/127.0f);}
@@ -532,6 +546,7 @@ static void backing_guide(uint32_t now,uint16_t neon,uint16_t pink,int y){
  rect(183,y+4,50,4,RGB(40,48,64));rect(183,y+4,50*(period-remain)/period,4,neon);
  char cue[24];
  if(guide_feedback<0&&now-backing_flash<1400u){strcpy(cue,"WRONG: ");strcat(cue,pitch_names[guide_played]);strcat(cue," TRY ");strcat(cue,pitch_names[guide_expected]);text(5,y+16,cue,RGB(255,110,110),FONT_SMALL);}
+ else if(guide_done)text(5,y+16,"SEQUENCE COMPLETE",neon,FONT_SMALL);
  else if(guide_step>=3)text(5,y+16,"CHORD COMPLETE!",neon,FONT_SMALL);
  else {strcpy(cue,guide_feedback>0&&now-backing_flash<600u?"GOOD! NEXT: ":"PLAY: ");strcat(cue,pitch_names[guide_pitch()]);text(5,y+16,cue,neon,FONT_SMALL);}
  format_int(score,(int)backing_hits);text(235-text_width(score,FONT_SMALL),y+16,score,pink,FONT_SMALL);
@@ -567,10 +582,10 @@ static void lesson_draw(uint32_t now,uint16_t neon,uint16_t pink){
  int len=lesson_lengths[scene],cell=228/len;
  for(int i=0;i<len;i++)rect(6+i*cell,173,cell-3,3,i<lesson_step?neon:RGB(40,48,64));
  if(lesson_wait==2){text(5,180,"ALL WORLDS MASTERED",WHITE,FONT_SMALL);text(5,199,"ENV: FREE PLAY",neon,FONT_SMALL);}
- else if(lesson_wait){text(5,176,"MISSION COMPLETE!",WHITE,FONT_SMALL);if(backing_style)backing_guide(now,neon,pink,192);else text(5,198,"PLAY ALONG FREELY",pink,FONT_SMALL);}
+ else if(lesson_wait){text(5,176,"MISSION COMPLETE!",WHITE,FONT_SMALL);text(5,196,"KEYS OFF - ENCOUNTER",neon,FONT_SMALL);}
  else {
   int next=lesson_next_pitch();
-  lesson_keyboard(next,lesson_pitch_mask(keys()),neon);
+  lesson_keyboard((lesson_pitch_mask(keys())&PC(next))?-1:next,0,neon);
   text(160,178,(scene==3||scene==6)?"ADD:":"NEXT:",WHITE,FONT_SMALL);
   text(160,194,pitch_names[next],neon,FONT_SMALL);
   if(lesson_feedback<0&&now-lesson_feedback_at<1400u){
@@ -668,6 +683,7 @@ int lw_offworld_expect(const char *name,int *v){
  else if(!strcmp(name,"offworld_lesson_errors"))*v=(int)lesson_errors;
  else if(!strcmp(name,"offworld_lesson_chord_pos"))*v=lesson_chord_pos;
  else if(!strcmp(name,"offworld_learn_on"))*v=learn_on;
+ else if(!strcmp(name,"offworld_guide_done"))*v=guide_done;
  else return 0;return 1;
 }
 #endif
