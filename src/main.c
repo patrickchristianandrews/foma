@@ -981,7 +981,61 @@ static void catalog_hud(void){
  text(8,201,"ALGO SOUND / K1 LEVEL",purple,FONT_SMALL);
  text(8,222,"PLAY / ARP RANDOM / HOME",WHITE,FONT_SMALL);
 }
+#if defined(FOMA_NATIVE_WIFI) && FOMA_NATIVE_WIFI
+enum { SF_DRIVE,SF_DELAY,SF_ROOM,SF_CHORUS,SF_FILTER,SF_LEVEL,SF_DEPTH,SF_DECAY,SF_MUTE,SF_COUNT };
+static int sound_menu_value(int ch){
+ switch(fxParameter){
+ case SF_DRIVE:return drive[ch];
+ case SF_DELAY:return fxDelay;
+ case SF_ROOM:return fxReverb;
+ case SF_CHORUS:return fxChorus;
+ case SF_FILTER:return fxFilter;
+ case SF_LEVEL:return level[ch];
+ case SF_DEPTH:return toneDepth[ch];
+ case SF_DECAY:return tails[ch];
+ default:return (p.mute>>ch)&1;
+ }
+}
+static void sound_menu_adjust(int ch,int d){
+ switch(fxParameter){
+ case SF_DRIVE:drive[ch]=clamp(drive[ch]+d,0,40);break;
+ case SF_DELAY:fxDelay=clamp(fxDelay+d,0,50);break;
+ case SF_ROOM:fxReverb=clamp(fxReverb+d,0,50);break;
+ case SF_CHORUS:fxChorus=clamp(fxChorus+d,0,50);break;
+ case SF_FILTER:fxFilter=clamp(fxFilter+d,0,100);break;
+ case SF_LEVEL:level[ch]=clamp(level[ch]+d,0,100);break;
+ case SF_DEPTH:toneDepth[ch]=clamp(toneDepth[ch]+d,0,72);break;
+ case SF_DECAY:tails[ch]=clamp(tails[ch]+d,ch?9:5,ch?17:14);break;
+ default:if(d>0)p.mute|=1u<<ch;else p.mute&=~(1u<<ch);break;
+ }
+}
+static void sound_menu_hud(void){
+ static const char *const label[]={"DRIVE","DELAY","REVERB","CHORUS","FILTER","LEVEL","FM DEPTH","DECAY","MUTE"};
+ uint16_t accent=RGB(190,120,255),cyan=RGB(103,212,250);
+ char b[12];
+ rect(0,0,240,240,BLACK);
+ text(8,4,"SOUND / FX",accent,FONT_SMALL);battery_hud();
+ text(8,24,names[p.sel],colors[p.sel],FONT_SMALL);
+ text(80,24,instrument(p.sel)->name,WHITE,FONT_SMALL);
+ text(8,43,fxParameter>=SF_DELAY&&fxParameter<=SF_FILTER?"GLOBAL EFFECT":"INSTRUMENT",cyan,FONT_SMALL);
+ int first=clamp(fxParameter-2,0,SF_COUNT-6);
+ for(int i=first;i<first+6;i++){
+  int y=64+(i-first)*19;
+  if(i==fxParameter)rect(3,y,234,18,RGB(50,30,70));
+  text(8,y,i==fxParameter?">":" ",WHITE,FONT_SMALL);
+  text(25,y,label[i],WHITE,FONT_SMALL);
+  int old=fxParameter;fxParameter=i;int value=sound_menu_value(p.sel);fxParameter=old;
+  format_int(b,value);text(184,y,b,cyan,FONT_SMALL);
+ }
+ text(8,182,"SELECT / K2: SCROLL",accent,FONT_SMALL);
+ text(8,200,"K1 TRACK / K3 VALUE",WHITE,FONT_SMALL);
+ text(8,220,"SEL BACK / HOME STAGE",cyan,FONT_SMALL);
+}
+#endif
 static void hud(void){
+#if defined(FOMA_NATIVE_WIFI) && FOMA_NATIVE_WIFI
+ if(page==FX){sound_menu_hud();return;}
+#endif
  if(page==SONG_DETAILS){song_details_hud();return;}
  if(page==RADIO){radio_hud();return;}
  if(page==CATALOG){catalog_hud();return;}
@@ -1225,7 +1279,15 @@ void loop(void){
   int catchup=0;while(playing&&(int32_t)(now-due)>=0&&catchup++<4){transport();due+=15000/p.bpm;remMs+=15000%p.bpm;if(remMs>=p.bpm){remMs-=p.bpm;due++;}}
   panel_lights(now);return;
  }
- if(button_pressed(BTN_SEL))p.mute^=1<<p.sel;
+ if(button_pressed(BTN_SEL)){
+#if defined(FOMA_NATIVE_WIFI) && FOMA_NATIVE_WIFI
+  if(page==HOME||page==MIX){page=FX;lastHud=now-1000u;}
+  else if(page==FX){page=MIX;clear(BLACK);lastHud=now-1000u;}
+  else p.mute^=1<<p.sel;
+#else
+  p.mute^=1<<p.sel;
+#endif
+ }
  if(button_pressed(BTN_ENV)||button_pressed(BTN_LFO)||button_pressed(BTN_EDIT)){
   if(page!=SECTION_SOUND){editSection=section;editParameter=PART_LEVEL;}
   page=SECTION_SOUND;
@@ -1251,7 +1313,13 @@ void loop(void){
   for(int s=0;s<NS;s++)for(int ch=0;ch<NC;ch++)saved.sound[s][ch]=sectionMix[s][ch];
   settings_save(&saved,sizeof(saved));
  }
- int d=encoder(ENC_SELECT);if(d){p.sel=(uint8_t)wrap(p.sel+d,8);if(page==HOME)page=MIX;}
+ int d=encoder(ENC_SELECT);if(d){
+#if defined(FOMA_NATIVE_WIFI) && FOMA_NATIVE_WIFI
+  if(page==FX)fxParameter=wrap(fxParameter+d,SF_COUNT);
+  else
+#endif
+  {p.sel=(uint8_t)wrap(p.sel+d,8);if(page==HOME)page=MIX;}
+ }
  d=encoder(ENC_PRESETS);if(d){p.style=(uint8_t)wrap(p.style+d,LW_STYLE_COUNT);if(page==SONG_DETAILS)scoped_generate();else generate();pos=0;due=now;remMs=0;}
  int ch=p.sel;
  d=encoder(ENC_ALGORITHM);if(d){
@@ -1261,6 +1329,10 @@ void loop(void){
   else drive[0]=clamp(drive[0]+d,0,40);
  }
  d=encoder(ENC_KNOB1);if(d){
+#if defined(FOMA_NATIVE_WIFI) && FOMA_NATIVE_WIFI
+  if(page==FX)p.sel=(uint8_t)wrap(p.sel+d,NC);
+  else
+#endif
   if(page==SECTION_SOUND)editSection=wrap(editSection+d,NS);
   else {p.bpm=(uint8_t)clamp(p.bpm+d,60,180);if(page==SONG_DETAILS&&songScope==0)songScope=1;}
  }
@@ -1269,7 +1341,13 @@ void loop(void){
   else if(page==GLOBAL)masterLevel=clamp(masterLevel+d,0,100);
   else if(page==SECTION_SOUND)editParameter=wrap(editParameter+d,MOT_PARAMS);
   else if(page==SEQ)cursor=wrap(cursor+d,16);
-  else if(page==FX)fxParameter=wrap(fxParameter+d,5);
+  else if(page==FX)fxParameter=wrap(fxParameter+d,
+#if defined(FOMA_NATIVE_WIFI) && FOMA_NATIVE_WIFI
+  SF_COUNT
+#else
+  5
+#endif
+  );
   else if(page==ENV)attackMs[ch]=clamp(attackMs[ch]+d,0,100);
   else if(page==MOTION)lfoRate[ch]=clamp(lfoRate[ch]+d,0,20);
   else level[ch]=(uint8_t)clamp(level[ch]+d,0,100);
@@ -1282,7 +1360,13 @@ void loop(void){
   else if(page==SEQ){
    uint8_t *note=&p.pat[section][ch][cursor];
    *note=(uint8_t)clamp((*note==EMPTY?0:*note)+d,ch?0:1,ch?12:15);
-  }else if(page==FX){switch(fxParameter){case 0:drive[ch]=clamp(drive[ch]+d,0,40);break;case 1:fxDelay=clamp(fxDelay+d,0,50);break;case 2:fxReverb=clamp(fxReverb+d,0,50);break;case 3:fxChorus=clamp(fxChorus+d,0,50);break;default:fxFilter=clamp(fxFilter+d,0,100);break;}}
+  }else if(page==FX){
+#if defined(FOMA_NATIVE_WIFI) && FOMA_NATIVE_WIFI
+   sound_menu_adjust(ch,d);
+#else
+   switch(fxParameter){case 0:drive[ch]=clamp(drive[ch]+d,0,40);break;case 1:fxDelay=clamp(fxDelay+d,0,50);break;case 2:fxReverb=clamp(fxReverb+d,0,50);break;case 3:fxChorus=clamp(fxChorus+d,0,50);break;default:fxFilter=clamp(fxFilter+d,0,100);break;}
+#endif
+  }
   else if(!ch)drive[ch]=clamp(drive[ch]+d,0,40);
   else toneDepth[ch]=clamp(toneDepth[ch]+d,0,72);
  }
