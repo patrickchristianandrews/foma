@@ -1426,7 +1426,7 @@ static void panel_lights(uint32_t now){
 #endif
 #if defined(FOMA_NATIVE_WIFI) && FOMA_NATIVE_WIFI
  }else if(page==OCEAN_VIS){
-  available=LIT(BTN_PLAY)|LIT(BTN_SEL)|LIT(BTN_EDIT)|LIT(BTN_ENV)|LIT(BTN_FX)|LIT(BTN_GLO);
+  available=LIT(BTN_PLAY)|LIT(BTN_SEL)|LIT(BTN_EDIT)|LIT(BTN_ENV)|LIT(BTN_FX)|LIT(BTN_GLO)|LIT(BTN_LFO);
   if(playing||lb_playing)active|=LIT(BTN_PLAY);
  }else if(page==LOOP_BUILDER){
   available=LIT(BTN_PLAY)|LIT(BTN_ARP)|LIT(BTN_SEL)|LIT(BTN_EDIT)|LIT(BTN_REC);

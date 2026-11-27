@@ -35,7 +35,7 @@ static unsigned world_hash(unsigned n);
 static uint32_t cut_at,cut_due,cut_count,film_seed;
 static int world_page,world_level,logs_on,auto_cut,idle_events;
 #ifdef PLAT_HOST
-static unsigned rendered_worlds,rendered_events,completed_events;
+static unsigned rendered_worlds,rendered_events,completed_events,abducted_worlds;
 #endif
 static unsigned seen_worlds;
 extern void lw_neon_shift_row(int y,int x,int w,int d);
@@ -89,6 +89,41 @@ static const char *const lesson_names[NWORLD]={"FIND THE NOTES","C MAJOR SCALE",
 static const char *const pitch_names[12]={"C","C#","D","D#","E","F","F#","G","G#","A","A#","B"};
 static int lesson,lesson_step,lesson_wait,lesson_release,lesson_feedback,lesson_streak;
 static unsigned lesson_score,lesson_done;
+static const char *const backing_names[]={"OFF","ORBIT PULSE","NEBULA DRIFT","ALIEN GROOVE","STAR ARPEGGIO"};
+static const uint8_t backing_roots[4][4]={{9,5,0,7},{0,9,5,7},{9,7,5,7},{0,5,9,7}};
+static const uint16_t backing_ms[]={600,600,720,480,420};
+static int backing_style,backing_beat,backing_root,backing_minor,backing_running;
+static uint32_t backing_due,backing_hits,backing_flash,backing_notes;
+static unsigned backing_mask(void){return PC(backing_root)|PC((backing_root+(backing_minor?3:4))%12)|PC((backing_root+7)%12);}
+static unsigned backing_period(void){return lesson&&scene==4?600u:backing_ms[backing_style];}
+static void backing_stop(void){if(backing_running){eng_note_off(300);eng_note_off(301);}backing_running=0;}
+static void backing_restart(uint32_t now){backing_stop();backing_beat=0;backing_due=now;}
+static void backing_tick(uint32_t now){
+ if(!backing_style){backing_stop();return;}
+ if((int32_t)(now-backing_due)<0)return;
+ int beat=backing_beat++%16,part=beat%4;
+ backing_due=now+backing_period();
+ int root=backing_roots[backing_style-1][beat/4];
+ if(lesson&&scene==2&&!lesson_wait)root=9;
+ if(lesson&&scene==4&&!lesson_wait)root=0;
+ if(lesson&&(scene==3||scene==6)&&!lesson_wait){
+  static const uint8_t chord_roots[2][4]={{0,5,7,7},{9,5,0,7}};
+  root=chord_roots[scene==6][lesson_step];
+ }
+ int minor=root==9;
+ backing_root=root;backing_minor=minor;
+ int bass=36+root;
+ if(part==0||backing_style==3){eng_note_on(300,(float)(bass+(backing_style==3&&part%2?12:0)),0.25f);backing_notes++;}
+ int interval=backing_style==4?(part==1?(minor?3:4):part==2?7:part==3?12:0):backing_style==2?(part%2?7:0):backing_style==3?(part%2?7:12):7;
+ eng_note_on(301,(float)(48+root+interval),backing_style==2?0.16f:0.21f);backing_notes++;
+ backing_running=1;
+}
+static void backing_play(uint32_t now,int midi){
+ if(!backing_style)return;
+ if(backing_mask()&PC(midi%12)){backing_hits++;backing_flash=now;}
+}
+static void backing_cycle(uint32_t now){backing_style=(backing_style+1)%5;backing_restart(now);}
+
 static uint32_t lesson_feedback_at,lesson_beat;
 static unsigned lesson_pitch_mask(uint32_t held){
  unsigned mask=0;
@@ -98,7 +133,7 @@ static unsigned lesson_pitch_mask(uint32_t held){
 static unsigned lesson_target(void){return lesson_step<lesson_lengths[scene]?lesson_steps[scene][lesson_step]:0;}
 static void lesson_reset_step(void){lesson_step=lesson_wait=lesson_release=lesson_feedback=0;lesson_beat=0;}
 static void lesson_toggle(uint32_t now){
- lesson=!lesson;world_page=0;lesson_reset_step();
+ lesson=!lesson;world_page=0;lesson_reset_step();backing_restart(now);
  eng_all_off();latched=0;
  if(lesson){
   drone=epic=0;lesson_score=lesson_done=0;lesson_streak=0;
@@ -121,7 +156,7 @@ static void lesson_input(uint32_t now,int pressed){
  if(lesson_wait){
   if(!event_kind){
    if(lesson_done==255u){lesson_wait=2;return;}
-   film_cut(now,(scene+1)%NWORLD);lesson_reset_step();
+   film_cut(now,(scene+1)%NWORLD);lesson_reset_step();backing_restart(now);
   }
   return;
  }
@@ -153,9 +188,10 @@ void lw_offworld_enter(void){
  octave=drone=epic=memory=scene=tone=0;vib=38;latched=0;
  select_preset(0);event_count=0;world_page=0;world_level=25;logs_on=1;auto_cut=1;idle_events=1;
  lesson=0;lesson_reset_step();lesson_score=lesson_done=0;lesson_streak=0;
- uint32_t now=millis();cut_count=0;film_seed=world_hash(now+123u);seen_worlds=1u;cut_at=now-400u;cut_due=now+18000u+film_seed%17000u;
+ backing_style=1;backing_running=0;backing_notes=backing_hits=0;backing_flash=0;backing_root=9;backing_minor=1;
+ uint32_t now=millis();backing_restart(now);cut_count=0;film_seed=world_hash(now+123u);seen_worlds=1u;cut_at=now-400u;cut_due=now+18000u+film_seed%17000u;
 #ifdef PLAT_HOST
- rendered_worlds=rendered_events=completed_events=0;
+ rendered_worlds=rendered_events=completed_events=abducted_worlds=0;
 #endif
  eng_world(0,world_level/100.0f);event_reset(now);
  set_mode(2);
@@ -177,6 +213,7 @@ void lw_offworld_input(void){
  }
  uint32_t now=millis();
  if(button_pressed(BTN_ENV))lesson_toggle(now);
+ if(button_pressed(BTN_LFO))backing_cycle(now);
  if(!lesson&&button_pressed(BTN_FX))world_page=!world_page;
  if(world_page&&button_pressed(BTN_SEL))film_cut(now,(scene+1)%NWORLD);
  if(world_page&&button_pressed(BTN_GLO)){auto_cut=!auto_cut;cut_due=now+18000u+film_seed%17000u;}
@@ -195,19 +232,21 @@ void lw_offworld_input(void){
  if((d=encoder(ENC_ALGORITHM))){vib=bound(vib+d,0,127);sound();}
  if(button_pressed(BTN_OCT_DOWN))octave=bound(octave-1,-2,2);
  if(button_pressed(BTN_OCT_UP))octave=bound(octave+1,-2,2);
- if(!lesson&&button_pressed(BTN_PLAY)){drone=!drone;eng_all_off();latched=0;}
- if(!lesson&&button_pressed(BTN_ARP)){epic=!epic;eng_all_off();latched=0;}
+ if(!lesson&&button_pressed(BTN_PLAY)){drone=!drone;eng_all_off();latched=0;backing_restart(now);}
+ if(!lesson&&button_pressed(BTN_ARP)){epic=!epic;eng_all_off();latched=0;backing_restart(now);}
  if(button_pressed(BTN_REC)){memory=!memory;eng_memory(memory);}
 
 
  if(!lesson&&world_page&&button_pressed(BTN_EDIT))event_start(now,scene);
  if(!lesson&&idle_events&&!event_kind&&(int32_t)(now-event_next)>=0)event_start(now,scene);
+ backing_tick(now);
  int pressed=0;
  for(int k=0;k<KEY_COUNT;k++){
   if(key_pressed(k)){
    pressed=1;if(!lesson)event_start(now,k);
    if(drone&&!(keys()&~(1u<<k))){eng_all_off();latched=0;}
    int p=KEY_FIRST_NOTE+k+octave*12;
+   backing_play(now,p);
    eng_note_on(k,(float)p,0.8f);
    if(epic){eng_note_on(k+32,(float)(p+7),0.65f);eng_note_on(k+64,(float)(p+12),0.65f);}
    latched|=1u<<k;
@@ -216,11 +255,12 @@ void lw_offworld_input(void){
   led_key(k,!!(latched&(1u<<k)));
  }
  lesson_input(now,pressed);
- if(lesson&&!lesson_wait){unsigned target=lesson_target();
+ if((lesson&&!lesson_wait)||(backing_style&&!world_page)){
+  unsigned target=lesson&&!lesson_wait?lesson_target():backing_mask();
   for(int k=0;k<KEY_COUNT;k++)led_key(k,!!(latched&(1u<<k))||((target&PC((KEY_FIRST_NOTE+k)%12))&&((now/170u)%2u==0)));}
  uint8_t st,a,b;
  while(midi_read(&st,&a,&b)){
-  if((st&0xf0)==0x90&&b){if(!lesson)event_start(now,a);eng_note_on(128+a,(float)a,(float)b/127.0f);}
+  if((st&0xf0)==0x90&&b){if(!lesson)event_start(now,a);backing_play(now,a);eng_note_on(128+a,(float)a,(float)b/127.0f);}
   else if((st&0xf0)==0x80||((st&0xf0)==0x90&&!b))eng_note_off(128+a);
  }
 }
@@ -293,6 +333,7 @@ static void encounter_draw(uint32_t now,int ship,int sy,uint16_t ink){
 #ifdef PLAT_HOST
  rendered_events|=1u<<(event_kind-1);
  if((event_phase_mask&15u)==15u)completed_events|=1u<<(event_kind-1);
+ if(age>=LIFT_MS&&age<FINISH_MS)abducted_worlds|=1u<<(event_kind-1);
 #endif
  switch(event_kind){
  case 1: /* abduct a vehicle */
@@ -312,7 +353,7 @@ static void encounter_draw(uint32_t now,int ship,int sy,uint16_t ink){
    line(lift_x,y+7,lift_x+5,y,ink);line(lift_x+5,y,lift_x,y-7,WHITE);}
   else if(age<FINISH_MS)orb(ship,sy+10,4,WHITE);break;
  case 5: /* lightning over volcano */
-  if((age/130u)%3u==0){line(x,49,x-10,66,WHITE);line(x-10,66,x+5,76,ink);line(x+5,76,x-4,104,WHITE);}
+  if((age/130u)%3u==0){int q=x>120?x-30:x+30;line(q,49,q-10,66,WHITE);line(q-10,66,q+5,76,ink);line(q+5,76,q-4,104,WHITE);}
   for(int i=0;i<5;i++)pixel(x-12+i*6,105-(int)((age/30u+i*5u)%25u),ink);
   break;
  case 6: /* passing spacecraft and signal pulse */
@@ -327,10 +368,17 @@ static void encounter_draw(uint32_t now,int ship,int sy,uint16_t ink){
   break;
  case 8: /* ice comet and visitor */
   {int mx=210-(int)(age*180u/EVENT_MS),my=56+(int)(age*29u/EVENT_MS);
-   line(mx,my,mx+18,my-5,ink);orb(mx,my,3,WHITE);creature(x,117,now,ink);}
+   line(mx,my,mx+18,my-5,ink);orb(mx,my,3,WHITE);}
   break;
  }
- (void)sy;
+ /* All worlds share a full capture sequence alongside their unique effect. */
+ if(event_kind!=1&&event_kind!=2&&event_kind!=4){
+  if(age<LIFT_MS){
+   if(event_kind==3||event_kind==6)flying_car(x,y,WHITE);
+   else if(event_kind==5){orb(x,y,5,RGB(255,160,60));pixel(x,y-2,WHITE);}
+   else creature(x,y-6,now,ink);
+  }else if(age<FINISH_MS)orb(ship,sy+10,4,WHITE);
+ }
 }
 static void alien_draw(uint32_t now){
  static const uint16_t sky[NWORLD]={RGB(12,14,48),RGB(12,42,25),RGB(30,9,48),RGB(6,32,55),RGB(52,14,10),RGB(15,22,43),RGB(34,11,36),RGB(10,28,50)};
@@ -393,14 +441,15 @@ static void alien_draw(uint32_t now){
   flying_car(224-(int)((now/33u)%210u),110,WHITE);
  }
  if(scene==1||scene==6||scene==7){int cx=14+(int)((now/70u)%210u);creature(cx,119,now,ink);}
- int abduct=event_kind==1||event_kind==2||event_kind==4;
+ int abduct=event_kind!=0;
  uint32_t age=now-event_at;
  if(abduct){
   if(age<APPROACH_MS)ship=(event_origin*(int)(APPROACH_MS-age)+event_x*(int)age)/(int)APPROACH_MS;
   else if(age<FINISH_MS)ship=event_x;
   else {int u=bound((int)(age-FINISH_MS),0,(int)(EVENT_MS-FINISH_MS));ship=event_x+(ship-event_x)*u/(int)(EVENT_MS-FINISH_MS);}
  }
- saucer(ship,sy,now,ink,abduct?(age>=APPROACH_MS&&age<LIFT_MS?30:0):((latched||pulse>3)?pulse+1:0),119);
+ int boosted=backing_style&&backing_hits&&now-backing_flash<350u;
+ saucer(ship,sy,now,ink,abduct?(age>=APPROACH_MS&&age<LIFT_MS?(boosted?46:30):0):((latched||pulse>3)?pulse+1:0),119);
  if(abduct&&age>=APPROACH_MS&&age<LIFT_MS)for(int i=0;i<7;i++){int yy=sy+14+(int)((age/25u+i*11u)%36u);pixel(ship+(i-3)*3,yy,WHITE);}
  encounter_draw(now,ship,sy,ink);
  for(int i=0;i<macros[3]/8;i++){unsigned q=world_hash((unsigned)i+scene*91u);
@@ -439,7 +488,20 @@ void lw_neon_boot_draw(uint32_t elapsed,uint32_t duration){
  saucer(front,72,elapsed,ink,0,0);
  text(32,10,"LIQUID WAVE",WHITE,FONT_BIG);text(78,211,"NEON TIDES",ink,FONT_SMALL);
 }
-/* Instruction panel replaces only the synth controls during a lesson. */
+static void backing_guide(uint32_t now,uint16_t neon,uint16_t pink,int y){
+ char chord[24],score[12];int n=0;
+ const char *p=pitch_names[backing_root];while(*p)chord[n++]=*p++;
+ if(backing_minor)chord[n++]='m';
+ chord[n++]=':';chord[n++]=' ';
+ unsigned mask=backing_mask();
+ for(int pc=0;pc<12;pc++)if(mask&PC(pc)){p=pitch_names[pc];while(*p)chord[n++]=*p++;chord[n++]=' ';}
+ chord[n]=0;
+ text(5,y,chord,neon,FONT_SMALL);
+ if(backing_hits&&now-backing_flash<350u)text(5,y+15,"IN HARMONY!",neon,FONT_SMALL);
+ else text(5,y+15,"FILL IN LIT NOTES",WHITE,FONT_SMALL);
+ format_int(score,(int)backing_hits);text(205,y+15,score,pink,FONT_SMALL);
+}
+ /* Instruction panel replaces only the synth controls during a lesson. */
 static void lesson_draw(uint32_t now,uint16_t neon,uint16_t pink){
  char num[12],notes[24];int n=0;
  unsigned target=lesson_target();
@@ -450,7 +512,7 @@ static void lesson_draw(uint32_t now,uint16_t neon,uint16_t pink){
  notes[n]=0;
  text(5,156,lesson_names[scene],neon,FONT_SMALL);
  if(lesson_wait==2){text(5,175,"ALL WORLDS MASTERED",WHITE,FONT_SMALL);text(5,194,"ENV: FREE PLAY",neon,FONT_SMALL);}
- else if(lesson_wait){text(5,175,"MISSION COMPLETE!",WHITE,FONT_SMALL);text(5,194,"WATCH THE ENCOUNTER",pink,FONT_SMALL);}
+ else if(lesson_wait){text(5,175,"MISSION COMPLETE!",WHITE,FONT_SMALL);if(backing_style)backing_guide(now,neon,pink,190);else text(5,194,"PLAY ALONG FREELY",pink,FONT_SMALL); }
  else {
   text(5,175,(scene==3||scene==6)?"HOLD CHORD:":"PLAY:",WHITE,FONT_SMALL);
   text(5,190,notes,neon,FONT_BIG);
@@ -465,7 +527,7 @@ static void lesson_draw(uint32_t now,uint16_t neon,uint16_t pink){
  }
  format_int(num,(int)lesson_score);text(175,156,num,pink,FONT_SMALL);
  int len=lesson_lengths[scene];for(int i=0;i<len;i++)rect(5+i*28,149,25,3,i<lesson_step?neon:RGB(40,48,64));
- text(5,229,"ENV EXIT",WHITE,FONT_SMALL);text(126,229,"HOME NEXT",WHITE,FONT_SMALL);
+ text(5,229,"ENV EXIT",WHITE,FONT_SMALL);text(95,229,"LFO TRACK",WHITE,FONT_SMALL);
 }
 void lw_offworld_draw(void){
  uint16_t neon=RGB(70,220,255),pink=RGB(255,90,180);
@@ -480,14 +542,20 @@ void lw_offworld_draw(void){
  static const char *const labels[4]={"K1 SWELL","K2 DRIFT","K3 SPACE","K4 RAIN"};
  static const char *const world_labels[4]={"K1 AMBI","K2 EVENT","K3 LOGS","K4 WORLD"};
  uint32_t now=millis();
- text(8,28,lesson?"ALIEN MUSIC QUEST":world_page?"WORLD SETTINGS":names[preset],pink,FONT_SMALL);
+ text(8,28,world_page?"WORLD SETTINGS":backing_style?backing_names[backing_style]:lesson?"ALIEN MUSIC QUEST":names[preset],pink,FONT_SMALL);
  alien_draw(now);
  text(8,140,worlds[scene],neon,FONT_SMALL);
  const char *status=auto_cut?"AUTO TOUR":"SCENE HOLD";
- if(event_kind){uint32_t age=now-event_at;int abduct=event_kind==1||event_kind==2||event_kind==4;
+ if(event_kind){uint32_t age=now-event_at;int abduct=event_kind!=0;
   status=age<APPROACH_MS?(abduct?"TARGET LOCK":"CONTACT"):age<LIFT_MS?(abduct?"BEAM ACTIVE":"ENCOUNTER"):age<FINISH_MS?(abduct?"CAPTURED":"RESOLVING"):"COMPLETE";}
  text(240-text_width(status,FONT_SMALL)-5,140,status,event_kind?pink:WHITE,FONT_SMALL);
  if(lesson){lesson_draw(now,neon,pink);return;}
+ if(backing_style&&!world_page){
+  text(5,156,"PLAY ALONG / LIT KEYS",neon,FONT_SMALL);
+  backing_guide(now,neon,pink,174);
+  text(5,207,"LFO TRACK / ENV QUEST",WHITE,FONT_SMALL);
+  text(5,221,"FX WORLD / HOME NEXT",WHITE,FONT_SMALL);return;
+ }
  for(int i=0;i<4;i++){
   int x=5+i*59;char val[12];int v=macros[i];
   if(world_page){
@@ -505,7 +573,7 @@ void lw_offworld_draw(void){
  text(125,207,"PRESET: SOUND",WHITE,FONT_SMALL);
  if(world_page){text(5,221,"SEL NEXT / GLO AUTO / EDIT EVENT",WHITE,FONT_SMALL);}
 
- else text(5,221,"ENV QUEST / FX WORLD / HOME",WHITE,FONT_SMALL);
+ else text(5,221,"ENV QUEST / LFO MUSIC / FX",WHITE,FONT_SMALL);
 }
 #ifdef PLAT_HOST
 int lw_offworld_expect(const char *name,int *v){
@@ -530,6 +598,10 @@ int lw_offworld_expect(const char *name,int *v){
  else if(!strcmp(name,"offworld_lesson_done"))*v=(int)lesson_done;
  else if(!strcmp(name,"offworld_lesson_score"))*v=(int)lesson_score;
  else if(!strcmp(name,"offworld_lesson_wait"))*v=lesson_wait;
+ else if(!strcmp(name,"offworld_backing"))*v=backing_style;
+ else if(!strcmp(name,"offworld_backing_notes"))*v=(int)backing_notes;
+ else if(!strcmp(name,"offworld_backing_hits"))*v=(int)backing_hits;
+ else if(!strcmp(name,"offworld_abductions"))*v=(int)abducted_worlds;
  else return 0;return 1;
 }
 #endif
