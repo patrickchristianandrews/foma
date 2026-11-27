@@ -200,6 +200,10 @@ static void screen_flush(void) {
     int h = fb_y1 - y > 64 ? 64 : fb_y1 - y;
     lcd_blit(0, (uint32_t)y, SCREEN_W, (uint32_t)h, fb + y * SCREEN_W);
   }
+  /* lcd_blit leaves the last strip's DMA running. The application owns a
+   * single framebuffer, so finish the transfer before loop() can modify it.
+   * Otherwise a full-screen redraw can corrupt the bottom 48 rows. */
+  lcd_sync();
   fb_y0 = SCREEN_H;
   fb_y1 = 0;
 }
