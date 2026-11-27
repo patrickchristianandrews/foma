@@ -3,6 +3,7 @@
 #include "plat.h"
 #include "../platform/fm1.h"
 static int pick,editing,len,choice;
+static int wifi_boot_checked;
 static const char *message="";
 extern int lw_radio_can_power_off(void);
 static char ssid[33],password[65];
@@ -14,6 +15,11 @@ static void join_selected(int force_password){
  if(!plat_wifi_found(pick,ssid,0,&secured)){message="SCAN FIRST";return;}
  if(!secured||(!force_password&&plat_wifi_kept(ssid))){message=plat_wifi_join(ssid,0)?"JOIN NOT READY":"";return;}
  wipe_password();editing=1;choice=0;
+}
+void lw_wifi_autostart(void){
+ if(wifi_boot_checked)return;
+ wifi_boot_checked=1;
+ if(plat_wifi_saved(0,0)&&plat_wifi_state()==WIFI_OFF)plat_wifi_on(1);
 }
 void lw_wifi_leave(void){editing=0;wipe_password();}
 int lw_wifi_step(void){
@@ -73,7 +79,7 @@ void lw_wifi_draw(void){
  else if(st==WIFI_CONNECTED){
   char ip[16],*p=ip;uint32_t v=plat_wifi_ip();
   for(int i=0;i<4;i++){char b[12];format_int(b,(v>>(8*i))&255u);for(int j=0;b[j];j++)*p++=b[j];if(i<3)*p++='.';}*p=0;
-  text(8,70,ip,dim,FONT_SMALL);
+  text(8,70,plat_wifi_kept(plat_wifi_ssid())?"SAVED / AUTO CONNECT":ip,dim,FONT_SMALL);
  }
  int first=pick>4?pick-4:0;
  for(int i=0;i<5;i++){
