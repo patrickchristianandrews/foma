@@ -1,11 +1,11 @@
-name: Liquid Wave Night Drift feasibility build
+name: Liquid Wave Neon Tides release candidate
 on:
   push:
     branches: [liquid-wave-offworld-development]
     paths: ['native/**', 'src/**', 'tests/offworld-mode.txt', '.github/workflows/offworld-feasibility.yml']
   workflow_dispatch:
 permissions:
-  contents: read
+  contents: write
 concurrency:
   group: offworld-${{ github.ref }}
   cancel-in-progress: true
@@ -46,10 +46,23 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/offworld-smoke"
           native/build/host/liquid-wave-offworld_host tests/offworld-mode.txt "$RUNNER_TEMP/offworld-smoke"
+      - name: Regression tests for all original screens and Wi-Fi lifecycle
+        run: |
+          mkdir -p "$RUNNER_TEMP/regression"
+          native/build/host/liquid-wave-offworld_host tests/native-wifi-audit.txt "$RUNNER_TEMP/regression"
+      - name: Radio audio fixture and lifecycle regression
+        run: |
+          if ! command -v ffmpeg >/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y ffmpeg
+          fi
+          ffmpeg -hide_banner -loglevel error -f lavfi -i sine=frequency=440:sample_rate=44100 -t 4 -ac 2 -b:a 128k -write_xing 0 -id3v2_version 0 "$RUNNER_TEMP/radio-fixture.mp3"
+          LW_RADIO_FIXTURE="$RUNNER_TEMP/radio-fixture.mp3" native/build/host/liquid-wave-offworld_host tests/native-radio-audit.txt "$RUNNER_TEMP/regression"
       - name: Check pinned flash driver chip recognition
         run: |
           cc -std=c99 -Wall -Wextra -Werror "$RUNNER_TEMP/fm1-base/tests/flash_ok_test.c" -o "$RUNNER_TEMP/flash-ok-test"
           "$RUNNER_TEMP/flash-ok-test"
+          (cd "$RUNNER_TEMP/fm1-base" && python3 tests/install_test.py)
       - name: Fetch pi32v2 toolchain and AC79 SDK
         run: |
           sh "$RUNNER_TEMP/fm1-base/tools/get_toolchain.sh"
@@ -75,6 +88,54 @@ jobs:
           PY
           python3 "$RUNNER_TEMP/fm1-base/tools/build.py" "$GITHUB_WORKSPACE/native"
           test -s native/build/liquid-wave-offworld.fwsc
+      - name: Assemble and verify separate USB test installer
+        run: |
+          python3 - <<'PY'
+          import hashlib,json,os,pathlib,re,zipfile
+          base=pathlib.Path(os.environ['RUNNER_TEMP'])/'fm1-base'
+          out=pathlib.Path('neon-candidate');out.mkdir()
+          raw=pathlib.Path('native/build/liquid-wave-offworld.fwsc').read_bytes()
+          product=''.join(chr((raw[i*48+47]-i-1)&255) for i in range(20) if raw[i*48+47]!=125)
+          assert len(raw)==611496 and product=='FM-1_9700' and b'FELUCCA-LOADER-1' in raw
+          hdr=pathlib.Path('native/app.h').read_text()
+          offsets=[int(v,16) for v in re.findall(r'0x([0-9a-fA-F]+)u',re.search(r'APP_STORE_MAP\s*\{([^}]+)\}',hdr)[1])]
+          assert len(offsets)==6 and all(n%4096==0 and 0x97000<=n and n+8192<=0xe0000 for n in offsets)
+          assert all(abs(a-b)>=8192 for i,a in enumerate(offsets) for b in offsets[i+1:])
+          digest=hashlib.sha256(raw).hexdigest()
+          (out/'firmware.fwsc').write_bytes(raw)
+          def strip(s):
+              return re.sub(r'^import .*?;\n','',re.sub(r'^export\s+','',s,flags=re.M),flags=re.M)
+          lib='\n'.join(strip((base/'web'/n).read_text()) for n in ('fm1pkg.js','fm1ota.js'))
+          old='/fm-?1|felucca|ota|composite|sinco|usb-midi/i'
+          assert old in lib
+          lib=lib.replace(old,'/fm-?1|felucca|ota|composite|sinco|usb-midi|liquid[ -]?wave/i')
+          html=(base/'web/installer.html').read_text()
+          check='if (productOf(pkg) !== meta.product) { sayK("badpkg"); return; }'
+          assert html.count(check)==1
+          html=html.replace(check,'''const hash = await crypto.subtle.digest("SHA-256", pkg);
+              const hex = [...new Uint8Array(hash)].map(b => b.toString(16).padStart(2,"0")).join("");
+              if (hex !== meta.sha256 || productOf(pkg) !== meta.product) { sayK("badpkg"); return; }''')
+          meta={'version':'Neon Tides — hardware-test candidate','product':product,'pkg':'firmware.fwsc','sha256':digest,'backup':False,'boot':None}
+          assert html.count('/*LIB*/')==html.count('/*META*/')==1
+          html=html.replace('/*LIB*/',lib).replace('/*META*/',json.dumps(meta))
+          for k,v in {'NAME':'Advanced Liquid Wave — Neon Tides','REPO':'https://github.com/patrickchristianandrews/foma','REPO_SHORT':'github.com/patrickchristianandrews/foma','LICENSE':'GPL-3.0 / MPL-2.0 components','CREDITS':'See repository source and license notices.'}.items():
+              html=html.replace('{{'+k+'}}',v)
+          assert not re.search(r'\{\{[A-Z_]+\}\}',html)
+          html=re.sub(r'(<body[^>]*>)',r'\1<p style="padding:12px;border:2px solid #b77836"><strong>Hardware-test candidate only.</strong> Automated tests passed; physical installation, real-time audio and recovery are unverified. Back up your device first; use a spare test unit only. Do not disconnect USB during a write. No bootloader update. The existing installer remains available. <a href="/liquid-wave/">Back to Liquid Wave</a></p>',html,count=1)
+          assert 'id="go"' in html and digest in html
+          (out/'index.html').write_text(html)
+          (out/'release.json').write_text(json.dumps({'revision':os.environ['GITHUB_SHA'],'product':product,'firmware_sha256':digest,'device_run':os.environ['GITHUB_RUN_ID'],'hardware_tested':False},indent=2))
+          (out/'LICENSE-DSP.txt').write_bytes(pathlib.Path('native/offworld/LICENSE').read_bytes())
+          with zipfile.ZipFile('Advanced-Liquid-Wave-Neon-Tides-test-installer.zip','w',zipfile.ZIP_DEFLATED) as z:
+              for f in sorted(out.iterdir()):z.write(f,f.name)
+          print('Neon Tides SHA256:',digest)
+          PY
+      - name: Retain exact verified test candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: liquid-wave-neon-tides-test-candidate
+          path: Advanced-Liquid-Wave-Neon-Tides-test-installer.zip
+          if-no-files-found: error
       - name: Preserve build diagnostics only (not a release)
         if: always()
         uses: actions/upload-artifact@v4
