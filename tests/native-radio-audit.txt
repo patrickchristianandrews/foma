@@ -3,7 +3,7 @@ tap HOME
 tap HOME
 tap HOME
 tap GLO
-wait 1000
+wait 2500
 tap SEL
 turn SELECT 1
 tap SAVE
