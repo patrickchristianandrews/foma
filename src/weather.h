@@ -31,6 +31,8 @@ int liquid_weather_accept(unsigned destination, const LiquidWeather *reading);
 int liquid_weather_destination(void);
 
 int liquid_weather_parse(const char *json,unsigned len,LiquidWeather *out);
+int liquid_weather_clock(const char *json,unsigned len,int utc);
+int liquid_weather_accept_clock(unsigned destination,const LiquidWeather *reading,int local_seconds);
 
 /* Network adapters call this to construct a location-specific HTTPS request path.
  * Returns 0 on insufficient buffer or invalid destination. */
