@@ -21,6 +21,10 @@
 void lw_wifi_draw(void);
 int lw_wifi_step(void);
 void lw_wifi_leave(void);
+void lw_radio_draw(void);
+int lw_radio_ui(void);
+void lw_radio_leave(void);
+static int native_radio_mode;
 #endif
 #define NC 8
 #define NS 5
@@ -877,7 +881,7 @@ static void song_details_hud(void){
 }
 static void radio_hud(void){
 #if defined(FOMA_NATIVE_WIFI) && FOMA_NATIVE_WIFI
- lw_wifi_draw();battery_hud();return;
+ if(native_radio_mode)lw_radio_draw();else lw_wifi_draw();battery_hud();return;
 #endif
  rect(0,0,240,240,BLACK);
  text(8,5,"4 / ONLINE RADIO",RGB(103,212,250),FONT_SMALL);
@@ -964,7 +968,7 @@ static void panel_lights(uint32_t now){
  }else if(page==RADIO){
   /* Advertise only the controls implemented by this build. */
 #if defined(FOMA_NATIVE_WIFI) && FOMA_NATIVE_WIFI
-  available=LIT(BTN_SEL)|LIT(BTN_SAVE)|LIT(BTN_GLO)|LIT(BTN_EDIT)|LIT(BTN_PLAY);
+  available=LIT(BTN_SEL)|LIT(BTN_SAVE)|LIT(BTN_GLO)|LIT(BTN_EDIT)|LIT(BTN_PLAY)|LIT(BTN_ARP)|LIT(BTN_SEQ);
 #endif
  }else if(page==CATALOG){
   available=LIT(BTN_PLAY)|LIT(BTN_ARP);
@@ -1106,7 +1110,7 @@ void loop(void){
   if(page==SONG_DETAILS){page=RADIO;radio_hud();lastHud=now;panel_lights(now);return;}
   if(page==RADIO){
 #if defined(FOMA_NATIVE_WIFI) && FOMA_NATIVE_WIFI
- lw_wifi_leave();
+ lw_wifi_leave();lw_radio_leave();
 #endif
  if(playing){playing=0;releaseRequested=1;}page=CATALOG;catalog_hud();lastHud=now;panel_lights(now);return;}
   if(page==CATALOG)catalog_stop();
@@ -1136,7 +1140,9 @@ void loop(void){
  }
  if(page==RADIO){
 #if defined(FOMA_NATIVE_WIFI) && FOMA_NATIVE_WIFI
-  if(lw_wifi_step())lastHud=now-1000u;
+  if(button_pressed(BTN_ARP)){native_radio_mode=!native_radio_mode;lw_wifi_leave();lw_radio_leave();lastHud=now-1000u;}
+  else if(native_radio_mode){if(lw_radio_ui())lastHud=now-1000u;}
+  else if(lw_wifi_step())lastHud=now-1000u;
 #endif
   if(now-lastHud>=1000){lastHud=now;radio_hud();}
   int catchup=0;while(playing&&(int32_t)(now-due)>=0&&catchup++<4){transport();due+=15000/p.bpm;remMs+=15000%p.bpm;if(remMs>=p.bpm){remMs-=p.bpm;due++;}}
