@@ -1,0 +1,15 @@
+# Experimental native Wi-Fi target; not the published FOMA firmware.
+name = "LIQUID-WAVE-WIFI"
+id_prefix = "FM-1_96"
+usb_manufacturer = "Random Candy Land"
+usb_product = "Liquid Wave WiFi"
+wifi = true
+ble = false
+usb_audio_in = false
+usb_audio_out = false
+include = ["../platform", "../src"]
+o2 = ["../src/liquid_song.c", "../src/weather.c", "../src/weather_parse.c"]
+words = "words.tsv"
+repo = "https://github.com/patrickchristianandrews/foma"
+licence = "GPL-3.0"
+credits = "Built with FM1 Base and Felucca."
