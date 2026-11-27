@@ -189,7 +189,11 @@ static void bluetooth_input(void) {
 /* Increase instrument loudness by 50% at the mixer, without changing
  * oscillator envelopes, FM timbre, track balance or pan. */
 static int32_t instrument_gain(int32_t sample){
+#if defined(FOMA_NATIVE_WIFI) && FOMA_NATIVE_WIFI
+ return sample;
+#else
  return sample+sample/2;
+#endif
 }
 /* Gentle bounded output knee retains headroom for overlapping notes and FX. */
 static int32_t output_limit(int32_t sample){
@@ -203,9 +207,15 @@ static int32_t output_limit(int32_t sample){
  * Master remains a true post-limiter attenuator, including silence at zero. */
 static int32_t loud_output(int32_t sample,int volume){
  int32_t a=sample<0?-sample:sample;
+#if defined(FOMA_NATIVE_WIFI) && FOMA_NATIVE_WIFI
+ /* Leave headroom for stacked FM voices, effects and network audio. */
+ if(a>22000)a=22000+(a-22000)/4;
+ if(a>28000)a=28000;
+#else
  a*=4;
  if(a>20000)a=20000+(a-20000)/8;
  if(a>32000)a=32000;
+#endif
  a=a*volume/100;
  return sample<0?-a:a;
 }
@@ -395,6 +405,7 @@ static void transport(void){
 }
 
 int liquid_weather_destination(void){return weather.place;}
+int liquid_weather_room_active(void){return page==WEATHER;}
 
 int liquid_weather_accept(unsigned destination,const LiquidWeather *reading){
  if(destination>=liquid_place_count||destination!=(unsigned)weather.place||!liquid_weather_valid(reading))return 0;
