@@ -531,10 +531,10 @@ static void backing_guide(uint32_t now,uint16_t neon,uint16_t pink,int y){
  if(remain>period)remain=period;
  rect(183,y+4,50,4,RGB(40,48,64));rect(183,y+4,50*(period-remain)/period,4,neon);
  char cue[24];
- if(guide_feedback<0&&now-backing_flash<1400u){strcpy(cue,"WRONG: ");strcat(cue,pitch_names[guide_played]);strcat(cue," TRY ");strcat(cue,pitch_names[guide_expected]);text(5,y+15,cue,RGB(255,110,110),FONT_SMALL);}
- else if(guide_step>=3)text(5,y+15,"CHORD COMPLETE!",neon,FONT_SMALL);
- else {strcpy(cue,guide_feedback>0&&now-backing_flash<600u?"GOOD! NEXT: ":"PLAY: ");strcat(cue,pitch_names[guide_pitch()]);text(5,y+15,cue,neon,FONT_SMALL);}
- format_int(score,(int)backing_hits);text(205,y+15,score,pink,FONT_SMALL);
+ if(guide_feedback<0&&now-backing_flash<1400u){strcpy(cue,"WRONG: ");strcat(cue,pitch_names[guide_played]);strcat(cue," TRY ");strcat(cue,pitch_names[guide_expected]);text(5,y+16,cue,RGB(255,110,110),FONT_SMALL);}
+ else if(guide_step>=3)text(5,y+16,"CHORD COMPLETE!",neon,FONT_SMALL);
+ else {strcpy(cue,guide_feedback>0&&now-backing_flash<600u?"GOOD! NEXT: ":"PLAY: ");strcat(cue,pitch_names[guide_pitch()]);text(5,y+16,cue,neon,FONT_SMALL);}
+ format_int(score,(int)backing_hits);text(235-text_width(score,FONT_SMALL),y+16,score,pink,FONT_SMALL);
 }
  /* Instruction panel replaces only the synth controls during a lesson. */
 /* Note diagram follows the physical C4-B4 guide octave, not a stylized
@@ -545,9 +545,9 @@ static void lesson_keyboard(int target,unsigned held,uint16_t neon){
  for(int i=0;i<7;i++){
   int pc=white[i],x=6+i*21;
   uint16_t fill=pc==target?neon:(held&PC(pc))?RGB(130,190,160):RGB(222,231,245);
-  rect(x,178,20,31,fill);
+  rect(x,178,20,30,fill);
   int w=text_width(pitch_names[pc],FONT_SMALL);
-  text(x+(20-w)/2,209-text_height(FONT_SMALL),pitch_names[pc],BLACK,FONT_SMALL);
+  text(x+(20-w)/2,208-text_height(FONT_SMALL),pitch_names[pc],BLACK,FONT_SMALL);
  }
  for(int i=0;i<5;i++){
   int pc=black[i],x=21+after[i]*21;
@@ -560,14 +560,14 @@ static void lesson_draw(uint32_t now,uint16_t neon,uint16_t pink){
  uint16_t ink=neon;
  int h=text_height(FONT_SMALL),footer=240-h;
  /* A dedicated title row, progress strip, keyboard and feedback row. */
- text(5,153,lesson_names[scene],neon,FONT_SMALL);
+ text(5,156,lesson_names[scene],neon,FONT_SMALL);
  format_int(num,(int)lesson_score);
  int score_x=235-text_width(num,FONT_SMALL);
- if(score_x>text_width(lesson_names[scene],FONT_SMALL)+12)text(score_x,153,num,pink,FONT_SMALL);
+ if(score_x>text_width(lesson_names[scene],FONT_SMALL)+12)text(score_x,156,num,pink,FONT_SMALL);
  int len=lesson_lengths[scene],cell=228/len;
  for(int i=0;i<len;i++)rect(6+i*cell,173,cell-3,3,i<lesson_step?neon:RGB(40,48,64));
  if(lesson_wait==2){text(5,180,"ALL WORLDS MASTERED",WHITE,FONT_SMALL);text(5,199,"ENV: FREE PLAY",neon,FONT_SMALL);}
- else if(lesson_wait){text(5,178,"MISSION COMPLETE!",WHITE,FONT_SMALL);if(backing_style)backing_guide(now,neon,pink,194);else text(5,198,"PLAY ALONG FREELY",pink,FONT_SMALL);}
+ else if(lesson_wait){text(5,176,"MISSION COMPLETE!",WHITE,FONT_SMALL);if(backing_style)backing_guide(now,neon,pink,192);else text(5,198,"PLAY ALONG FREELY",pink,FONT_SMALL);}
  else {
   int next=lesson_next_pitch();
   lesson_keyboard(next,lesson_pitch_mask(keys()),neon);
@@ -579,18 +579,18 @@ static void lesson_draw(uint32_t now,uint16_t neon,uint16_t pink){
    else {strcpy(msg,"WRONG ");strcat(msg,pitch_names[lesson_played]);strcat(msg," TRY ");strcat(msg,pitch_names[lesson_expected]);}
   }else if(scene==4){
    int age=lesson_beat?(int)(now-lesson_beat):0,phase=bound(age,0,600);
-   rect(160,207,70,3,RGB(40,48,64));rect(160,207,70*phase/600,3,neon);
+   rect(160,212,70,3,RGB(40,48,64));rect(160,212,70*phase/600,3,neon);
    strcpy(msg,lesson_step?"PLAY ON THE BEAT":"START WITH C");
   }else if(lesson_feedback>0&&now-lesson_feedback_at<700u)strcpy(msg,"CORRECT! NEXT KEY");
   else strcpy(msg,(scene==3||scene==6)?"HOLD + ADD LIT KEY":"FOLLOW LIT KEY");
-  text(5,211,msg,ink,FONT_SMALL);
+  text(5,208,msg,ink,FONT_SMALL);
  }
  rect(0,footer,240,h,BLACK);
  text(5,footer,"SAVE: LEARN OFF",WHITE,FONT_SMALL);
 }
 void lw_offworld_draw(void){
  uint16_t neon=RGB(70,220,255),pink=RGB(255,90,180);
- clear(BLACK);text(8,3,"NEON TIDES",neon,FONT_BIG);
+ clear(BLACK);text(8,4,"NEON TIDES",neon,FONT_SMALL);
  if(mode!=2){
   if(init_error==1){text(8,65,"WAITING FOR NETWORK",pink,FONT_SMALL);text(8,92,"AUTO RETRY",WHITE,FONT_SMALL);}
   else if(init_error==2){char bytes[12];format_int(bytes,(int)lw_offworld_failed_bytes());text(8,65,"AUDIO RAM ALLOCATION FAILED",pink,FONT_SMALL);text(8,92,"FAILED BLOCK BYTES",WHITE,FONT_SMALL);text(8,112,bytes,neon,FONT_SMALL);}
@@ -601,7 +601,7 @@ void lw_offworld_draw(void){
  static const char *const labels[4]={"K1 SWELL","K2 DRIFT","K3 SPACE","K4 RAIN"};
  static const char *const world_labels[4]={"K1 AMBI","K2 EVENT","K3 LOGS","K4 WORLD"};
  uint32_t now=millis();
- text(8,28,world_page?"WORLD SETTINGS":backing_style?backing_names[backing_style]:lesson?"ALIEN MUSIC QUEST":names[preset],pink,FONT_SMALL);
+ text(8,25,world_page?"WORLD SETTINGS":backing_style?backing_names[backing_style]:lesson?"ALIEN MUSIC QUEST":names[preset],pink,FONT_SMALL);
  alien_draw(now);
  text(8,140,worlds[scene],neon,FONT_SMALL);
  const char *status=auto_cut?"AUTO":"HOLD";
