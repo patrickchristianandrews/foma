@@ -8,6 +8,7 @@
  */
 #include "fm1.h"
 #include "liquid_song.h"
+#include "song_catalog.h"
 #include "tidbit_portrait.h"
 #if defined(__has_include)
 #if __has_include("tidbit_room_generated.h")
@@ -23,7 +24,7 @@
 
 typedef struct { uint32_t magic; uint8_t style,bpm,sel,mute; uint8_t pat[NS][NC][16]; } Project;
 static Project p;
-enum {HOME, MIX, ENV, MOTION, EDIT, GLOBAL, FX, SEQ, SECTION_SOUND, WEATHER, SONG_DETAILS, RADIO};
+enum {HOME, MIX, ENV, MOTION, EDIT, GLOBAL, FX, SEQ, SECTION_SOUND, WEATHER, SONG_DETAILS, RADIO, CATALOG};
 static int page, cursor, octave, loopSection, repeat, transpose;
 static volatile int masterLevel=85;
 static uint8_t level[8]={85,85,85,85,85,85,85,85};
@@ -192,6 +193,7 @@ static void mix_sample(int32_t sample,int pan,int32_t *mono,int32_t *left,int32_
 }
 void audio(int32_t *out,uint32_t frames){
  while(tail!=head){Event e=queue[tail];tail=(tail+1)&63;
+ if(e.drum==128){if(e.voice<NV&&v[e.voice].sh>10)v[e.voice].sh=10;continue;}
  if(e.drum){drumTail=e.sh;drumPan=e.pan;if(e.drum&1){ke=e.amp;ki=e.inc;kbase=e.inc/7;}if(e.drum&2)se=e.amp*3/4+e.idx*30;if(e.drum&12)he=e.amp/2+e.idx*20;}
  else {Voice *a=&v[e.voice];a->inc=e.inc;a->env=e.amp<<14;a->idx=e.idx;a->sh=e.sh;a->ratio=e.ratio;a->pan=e.pan;a->age=0;int ch=1;for(int j=1;j<NC;j++)if(e.voice>=vb[j]&&e.voice<vb[j]+vn[j]){ch=j;break;}a->attack=(uint32_t)attackMs[ch]*44u;}}
  /* Stop releases active voices smoothly on the audio thread. */
@@ -250,6 +252,36 @@ void audio(int32_t *out,uint32_t frames){
  out[n*2]+=output_limit(dryL*volume/100);
  out[n*2+1]+=output_limit(dryR*volume/100);
  }
+}
+/* Catalog player uses the existing FM voices, with exact source pitches,
+ * delta-time scheduling and bounded per-note releases. It never edits p. */
+static int catalogIndex,catalogPlaying,catalogEvent,catalogVolume=75,catalogSpeed=100,catalogPatch=0;
+static uint32_t catalogStart,catalogTick,catalogEnd,catalogOff[6];
+static const uint8_t catalogVoices[6]={1,2,3,5,6,7};
+static const char *catalogPatches[]={"SOFT KEYS","FM BELLS","WARM ORGAN","BRIGHT KEYS"};
+static void catalog_stop(void){catalogPlaying=0;releaseRequested=1;for(int i=0;i<6;i++)catalogOff[i]=0;}
+static void catalog_start(uint32_t now){
+ catalog_stop();playing=0;catalogEvent=0;catalogTick=catalogSongs[catalogIndex].events[0].dt;
+ catalogStart=now;catalogEnd=0;catalogPlaying=1;
+}
+static void catalog_playback(uint32_t now){
+ if(!catalogPlaying)return;
+ const CatalogSong *song=&catalogSongs[catalogIndex];
+ uint32_t tick=(uint32_t)(((uint64_t)(now-catalogStart)*song->bpm*24u*catalogSpeed)/6000000u);
+ for(int i=0;i<6;i++)if(catalogOff[i]&&tick>=catalogOff[i]){
+  Event e={catalogVoices[i],0,128,0,0,0,0,0};enqueue(e);catalogOff[i]=0;
+ }
+ for(int budget=0;catalogEvent<song->count&&tick>=catalogTick&&budget<24;budget++){
+  const CatalogEvent *note=&song->events[catalogEvent];
+  int slot=0;for(int j=1;j<6;j++)if(catalogOff[j]<catalogOff[slot])slot=j;
+  catalogOff[slot]=catalogTick+(note->dur?note->dur:1);
+  if(catalogOff[slot]>catalogEnd)catalogEnd=catalogOff[slot];
+  static const uint8_t ratio[]={1,3,2,2},depth[]={14,32,4,24};
+  Event e={catalogVoices[slot],16,0,ratio[catalogPatch],note_inc(note->note&127),catalogVolume*95,depth[catalogPatch],(note->note&128)?-24:24};
+  enqueue(e);
+  if(++catalogEvent<song->count)catalogTick+=song->events[catalogEvent].dt;
+ }
+ if(catalogEvent>=song->count&&tick>=catalogEnd)catalog_stop();
 }
 static void generate(void){
  static uint8_t nextPattern[NS][NC][16];
@@ -835,9 +867,31 @@ static void radio_hud(void){
  text(8,159,"No station is playing.",WHITE,FONT_SMALL);
  text(8,222,"HOME / RETURN TO STAGE",WHITE,FONT_SMALL);battery_hud();
 }
+static void catalog_hud(void){
+ uint16_t purple=RGB(190,120,255),blue=RGB(103,212,250);
+ char val[12];
+ rect(0,0,240,240,BLACK);
+ text(8,3,"5 / SONG LIBRARY",purple,FONT_SMALL);battery_hud();
+ int first=clamp(catalogIndex-2,0,COUNT(catalogSongs)-6);
+ for(int i=0;i<6;i++){
+  int n=first+i,y=27+i*20;
+  if(n==catalogIndex)rect(3,y,234,18,RGB(58,35,78));
+  text(8,y,n==catalogIndex?">":" ",purple,FONT_SMALL);
+  text(24,y,catalogSongs[n].title,WHITE,FONT_SMALL);
+ }
+ text(8,151,catalogPlaying?"NOW PLAYING":"READY / SELECT SONG",blue,FONT_SMALL);
+ format_int(val,catalogIndex+1);text(184,151,val,WHITE,FONT_SMALL);text(208,151,"/12",WHITE,FONT_SMALL);
+ rect(8,171,224,6,RGB(45,37,57));
+ if(catalogPlaying)rect(8,171,catalogEvent*224/catalogSongs[catalogIndex].count,6,purple);
+ text(8,181,catalogPatches[catalogPatch],WHITE,FONT_SMALL);
+ format_int(val,catalogVolume);text(176,181,val,blue,FONT_SMALL);
+ text(8,201,"ALGO SOUND / K1 LEVEL",purple,FONT_SMALL);
+ text(8,222,"PLAY / ARP RANDOM / HOME",WHITE,FONT_SMALL);
+}
 static void hud(void){
  if(page==SONG_DETAILS){song_details_hud();return;}
  if(page==RADIO){radio_hud();return;}
+ if(page==CATALOG){catalog_hud();return;}
  if(page==WEATHER){weather_hud(millis());return;}
  if(page==SECTION_SOUND||page==MOTION||page==ENV||page==EDIT){motion_hud();return;}
  if(page!=HOME){
@@ -989,6 +1043,8 @@ void loop(void){
  }
  if(button_pressed(BTN_HOME)){
   if(page==SONG_DETAILS){page=RADIO;radio_hud();lastHud=now;return;}
+  if(page==RADIO){if(playing){playing=0;releaseRequested=1;}page=CATALOG;catalog_hud();lastHud=now;led_button(BTN_PLAY,0);return;}
+  if(page==CATALOG)catalog_stop();
   if(page==HOME&&!skippedBoot){
    page=WEATHER;
    weather_hud(now);
@@ -1000,6 +1056,17 @@ void loop(void){
   stage_plane(now);
   stage_surface();
   for(int i=0;i<NC;i++)faceDraw(i);
+ }
+ if(page==CATALOG){
+  int d=encoder(ENC_SELECT);d+=encoder(ENC_PRESETS);
+  if(d){catalog_stop();catalogIndex=wrap(catalogIndex+d,COUNT(catalogSongs));}
+  d=encoder(ENC_ALGORITHM);if(d)catalogPatch=wrap(catalogPatch+d,COUNT(catalogPatches));
+  d=encoder(ENC_KNOB1);if(d)catalogVolume=clamp(catalogVolume+d,0,100);
+  if(button_pressed(BTN_ARP)){catalog_stop();catalogIndex=wrap(catalogIndex+1+(int)rnd(COUNT(catalogSongs)-1),COUNT(catalogSongs));}
+  if(button_pressed(BTN_PLAY)){if(catalogPlaying)catalog_stop();else catalog_start(now);}
+  catalog_playback(now);
+  if(now-lastHud>=90){lastHud=now;catalog_hud();}
+  led_button(BTN_HOME,1);led_button(BTN_PLAY,catalogPlaying);return;
  }
  if(page==RADIO){
   if(now-lastHud>=1000){lastHud=now;radio_hud();}

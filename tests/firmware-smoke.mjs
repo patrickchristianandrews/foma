@@ -164,7 +164,14 @@ weather.tap(HOME);
 assert.notDeepEqual(weather.frame(),detailsFrame,'fourth HOME page is distinct from song details');
 const radioFrame=weather.frame();
 weather.tap(HOME);
-assert.notDeepEqual(weather.frame(),radioFrame,'HOME returns from radio to stage');
+assert.notDeepEqual(weather.frame(),radioFrame,'fifth HOME screen is Song Library');
+weather.tap(PLAY);
+assert(weather.led(PLAY),'catalog song starts');
+assert(weather.advance(1800),'catalog source notes produce audio');
+weather.tap(PLAY);
+assert(!weather.led(PLAY),'catalog stops');
+weather.tap(HOME);
+assert(!weather.led(PLAY),'HOME returns from library to stage');
 weather.tap(SAVE);
 assert.deepEqual(weather.store(), first, 'weather travel and playback preserve the saved arrangement');
 // Third HOME screen: real instrument presets and a track-only remix.
