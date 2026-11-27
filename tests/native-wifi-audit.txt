@@ -1,0 +1,32 @@
+wait 1000
+expect wifi_state 0
+tap HOME
+tap HOME
+tap HOME
+tap GLO
+wait 1000
+expect wifi_state 2
+tap SEL
+tap SAVE
+expect password_editing 1
+tap SEL
+expect password_length 1
+tap PLAY
+expect password_editing 1
+tap GLO
+expect password_editing 0
+expect password_length 0
+turn SELECT 1
+tap SAVE
+wait 2000
+expect wifi_state 5
+tap ARP
+wait 300
+expect radio_active 1
+tap PLAY
+wait 300
+expect radio_state 4
+expect radio_buffers 0
+tap HOME
+expect radio_active 0
+expect radio_buffers 0
