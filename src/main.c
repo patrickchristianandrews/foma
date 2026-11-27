@@ -19,6 +19,7 @@
 #include "weather.h"
 #if defined(FOMA_NATIVE_WIFI) && FOMA_NATIVE_WIFI
 void lw_wifi_draw(void);
+const char *lw_weather_status(void);
 int lw_wifi_step(void);
 void lw_wifi_leave(void);
 void lw_radio_draw(void);
@@ -600,14 +601,24 @@ static void weather_hud(uint32_t now){
  line(8,201,232,201,peach);
  if(live){
   text(8,205,liquid_weather_condition(code),WHITE,FONT_SMALL);
+  text(8,38,"LIVE",RGB(90,220,150),FONT_SMALL);
   format_int(value,weather.reading.temperature10/10);text(185,205,value,WHITE,FONT_SMALL);text(210,205,"C",peach,FONT_SMALL);
   }else {
   text(8,205,moon?"LUNAR MODE":liquid_weather_condition(code),WHITE,FONT_SMALL);
-  if(!moon){format_int(value,offlineTemp);text(124,205,value,WHITE,FONT_SMALL);text(150,205,"C",peach,FONT_SMALL);text(170,205,"DEMO",purple,FONT_SMALL);}
+  if(!moon){format_int(value,offlineTemp);text(124,205,value,WHITE,FONT_SMALL);text(150,205,"C",peach,FONT_SMALL); 
+#if defined(FOMA_NATIVE_WIFI) && FOMA_NATIVE_WIFI
+  text(170,205,lw_weather_status(),purple,FONT_SMALL);
+#else
+  text(170,205,"DEMO",purple,FONT_SMALL);
+#endif
+}
  }
  format_int(value,live?weather.reading.wind10/10:offlineWind);
  if(!moon){text(8,105,"WIND",peach,FONT_SMALL);text(8,122,value,WHITE,FONT_SMALL);text(8,139,"KM/H",peach,FONT_SMALL);}
- text(8,222,"K1 SKY K2 HR K3 C K4 WIND",peach,FONT_SMALL);
+ if(live){
+  char clock[6]={(char)('0'+minute/600),(char)('0'+minute/60%10),':',(char)('0'+minute%60/10),(char)('0'+minute%10),0};
+  text(8,222,"LOCAL TIME",peach,FONT_SMALL);text(110,222,clock,WHITE,FONT_SMALL);
+ }else text(8,222,"K1 SKY K2 HR K3 C K4 WIND",peach,FONT_SMALL);
  if(ambientLevel)text(8,35,"AMB",purple,FONT_SMALL);
  if(animalLevel)text(34,35,"CALL",purple,FONT_SMALL);
  if(weather.playing)rect(196,8,7,7,purple);
@@ -1118,10 +1129,10 @@ void loop(void){
     lastHud=now-1000u;
    }
    int wd=encoder(ENC_SELECT);if(wd)weather_select(wrap((weather.place<0?0:weather.place)+wd,liquid_place_count));
-   wd=encoder(ENC_KNOB1);if(wd){offlineScene=wrap((int)offlineScene+wd,COUNT(offlineCodes));weather.available=0;weather.step=0;}
-   wd=encoder(ENC_KNOB2);if(wd){offlineHour=wrap(offlineHour+wd,24);offlineClock=now;weather.available=0;weather.step=0;}
-   wd=encoder(ENC_KNOB3);if(wd){offlineTemp=clamp(offlineTemp+wd,-30,45);weather.available=0;weather.step=0;}
-   wd=encoder(ENC_KNOB4);if(wd){offlineWind=clamp(offlineWind+wd,0,100);weather.available=0;weather.step=0;}
+   wd=encoder(ENC_KNOB1);if(wd&&!weather_fresh(now)){offlineScene=wrap((int)offlineScene+wd,COUNT(offlineCodes));weather.available=0;weather.step=0;}
+   wd=encoder(ENC_KNOB2);if(wd&&!weather_fresh(now)){offlineHour=wrap(offlineHour+wd,24);offlineClock=now;weather.available=0;weather.step=0;}
+   wd=encoder(ENC_KNOB3);if(wd&&!weather_fresh(now)){offlineTemp=clamp(offlineTemp+wd,-30,45);weather.available=0;weather.step=0;}
+   wd=encoder(ENC_KNOB4);if(wd&&!weather_fresh(now)){offlineWind=clamp(offlineWind+wd,0,100);weather.available=0;weather.step=0;}
    /* Dedicated weather controls: FX cycles texture, ENV toggles ambience,
       LFO toggles dog/wildlife level, SEL auditions the selected call. */
    if(button_pressed(BTN_FX))ambientMode=(ambientMode+1)%4;
