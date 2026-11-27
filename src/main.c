@@ -894,17 +894,53 @@ static void motion_adjust(int ch,int param,int d){
  else if(param==MOT_DEPTH){if(ch)motion[ch]=clamp(motion[ch]+d,0,32);}
  else if(param!=PART_RATIO||ch)tune_part(&sectionMix[editSection][ch],param,d);
 }
+#if defined(FOMA_NATIVE_WIFI) && FOMA_NATIVE_WIFI
+/* Distinct native pages share the renderer, not the parameter set. */
+static const uint8_t env_params[]={MOT_ATTACK,PART_DECAY,PART_LEVEL};
+static const uint8_t lfo_params[]={MOT_RATE,MOT_DEPTH};
+static const uint8_t edit_params[]={PART_LEVEL,PART_PITCH,PART_DEPTH,PART_DECAY,PART_RATIO,PART_PAN};
+static const uint8_t *native_edit_params(int *count){
+ if(page==ENV){*count=COUNT(env_params);return env_params;}
+ if(page==MOTION){*count=COUNT(lfo_params);return lfo_params;}
+ *count=COUNT(edit_params);return edit_params;
+}
+static int native_edit_page(void){return page==ENV||page==MOTION||page==SECTION_SOUND;}
+static void native_edit_scroll(int d){
+ int count;const uint8_t *params=native_edit_params(&count);
+ int i=0;while(i<count-1&&params[i]!=editParameter)i++;
+ editParameter=params[wrap(i+d,count)];
+}
+#endif
 static void motion_hud(void){
  uint16_t violet=RGB(190,120,255),ink=RGB(103,212,250);
  char value[12];
  rect(0,0,240,240,BLACK);
  text(8,3,"LIQUID WAVE",violet,FONT_SMALL);battery_hud();
+#if defined(FOMA_NATIVE_WIFI) && FOMA_NATIVE_WIFI
+ text(8,22,page==ENV?"ENVELOPE":page==MOTION?"LFO / MOTION":"SECTION SOUND EDIT",WHITE,FONT_SMALL);
+#else
  text(8,22,"MOTION / ENVELOPE",WHITE,FONT_SMALL);
+#endif
  text(8,42,names[p.sel],colors[p.sel],FONT_SMALL);
  text(80,42,instrument(p.sel)->name,WHITE,FONT_SMALL);
  text(8,60,"K1",violet,FONT_SMALL);
  text(35,60,sections[editSection],ink,FONT_SMALL);
  text(120,60,editParameter>=PART_PARAMS?"ALL SECTIONS":"SECTION",ink,FONT_SMALL);
+#if defined(FOMA_NATIVE_WIFI) && FOMA_NATIVE_WIFI
+ int count;const uint8_t *params=native_edit_params(&count);
+ for(int row=0;row<count;row++){
+  int i=params[row],y=80+row*18;
+  uint16_t color=i==editParameter?RGB(255,190,237):WHITE;
+  if(i==editParameter)rect(3,y,234,17,RGB(50,30,70));
+  text(8,y,i==editParameter?">":" ",color,FONT_SMALL);
+  text(24,y,partParams[i],color,FONT_SMALL);
+  if(!p.sel&&(i==PART_RATIO||i>=PART_PARAMS))text(176,y,"N/A",color,FONT_SMALL);
+  else {format_int(value,motion_value(p.sel,i));text(176,y,value,color,FONT_SMALL);}
+ }
+ text(8,190,"K2 PARAM / K3 VALUE",violet,FONT_SMALL);
+ text(8,207,"K1 PART / SELECT TRACK",WHITE,FONT_SMALL);
+ text(8,224,page==ENV?"K4 DECAY / HOME":page==MOTION?"K4 DEPTH / HOME":"K4 PAN / HOME",ink,FONT_SMALL);
+#else
  int first=clamp(editParameter-2,0,MOT_PARAMS-6);
  for(int i=first;i<first+6;i++){
   int y=80+(i-first)*18;
@@ -918,6 +954,7 @@ static void motion_hud(void){
  text(8,190,"K2 PARAM / K3 VALUE",violet,FONT_SMALL);
  text(8,207,"K4 PAN / SELECT CHARACTER",WHITE,FONT_SMALL);
  text(8,224,"SEQ INSTRUMENT / HOME",ink,FONT_SMALL);
+#endif
 }
 static void song_details_hud(void){
  char value[12];
@@ -1101,7 +1138,13 @@ static void panel_lights(uint32_t now){
   if(recording)active|=LIT(BTN_REC);
   if(page==SEQ)active|=LIT(BTN_SEQ);
   if(page==FX)active|=LIT(BTN_FX);
+#if defined(FOMA_NATIVE_WIFI) && FOMA_NATIVE_WIFI
+  if(page==ENV)active|=LIT(BTN_ENV);
+  if(page==MOTION)active|=LIT(BTN_LFO);
+  if(page==SECTION_SOUND)active|=LIT(BTN_EDIT);
+#else
   if(page==SECTION_SOUND)active|=LIT(BTN_ENV)|LIT(BTN_LFO)|LIT(BTN_EDIT);
+#endif
   if(page==GLOBAL)active|=LIT(BTN_GLO);
   if(p.mute&(1u<<p.sel))active|=LIT(BTN_SEL);
   if(page!=SONG_DETAILS){
@@ -1288,10 +1331,16 @@ void loop(void){
   p.mute^=1<<p.sel;
 #endif
  }
+#if defined(FOMA_NATIVE_WIFI) && FOMA_NATIVE_WIFI
+ if(button_pressed(BTN_ENV)){page=ENV;editSection=section;editParameter=MOT_ATTACK;lastHud=now-1000u;}
+ if(button_pressed(BTN_LFO)){page=MOTION;editSection=section;editParameter=MOT_RATE;lastHud=now-1000u;}
+ if(button_pressed(BTN_EDIT)){page=SECTION_SOUND;editSection=section;editParameter=PART_LEVEL;lastHud=now-1000u;}
+#else
  if(button_pressed(BTN_ENV)||button_pressed(BTN_LFO)||button_pressed(BTN_EDIT)){
   if(page!=SECTION_SOUND){editSection=section;editParameter=PART_LEVEL;}
   page=SECTION_SOUND;
  }
+#endif
  if(button_pressed(BTN_GLO))page=GLOBAL;
  if(button_pressed(BTN_FX))page=FX;
  if(button_pressed(BTN_SEQ)){if(page==SEQ)repeat=!repeat;page=SEQ;loopSection=section;}
@@ -1333,13 +1382,21 @@ void loop(void){
   if(page==FX)p.sel=(uint8_t)wrap(p.sel+d,NC);
   else
 #endif
+#if defined(FOMA_NATIVE_WIFI) && FOMA_NATIVE_WIFI
+  if(native_edit_page())editSection=wrap(editSection+d,NS);
+#else
   if(page==SECTION_SOUND)editSection=wrap(editSection+d,NS);
+#endif
   else {p.bpm=(uint8_t)clamp(p.bpm+d,60,180);if(page==SONG_DETAILS&&songScope==0)songScope=1;}
  }
  d=encoder(ENC_KNOB2);if(d){
   if(page==SONG_DETAILS){songHarmony.root=(int8_t)(wrap(songHarmony.root+d+6,12)-6);if(songScope==0)songScope=1;}
   else if(page==GLOBAL)masterLevel=clamp(masterLevel+d,0,100);
+#if defined(FOMA_NATIVE_WIFI) && FOMA_NATIVE_WIFI
+  else if(native_edit_page())native_edit_scroll(d);
+#else
   else if(page==SECTION_SOUND)editParameter=wrap(editParameter+d,MOT_PARAMS);
+#endif
   else if(page==SEQ)cursor=wrap(cursor+d,16);
   else if(page==FX)fxParameter=wrap(fxParameter+d,
 #if defined(FOMA_NATIVE_WIFI) && FOMA_NATIVE_WIFI
@@ -1355,7 +1412,11 @@ void loop(void){
  d=encoder(ENC_KNOB3);if(d){
   if(page==SONG_DETAILS){songDensity=clamp(songDensity+d,0,4);if(songScope==0)songScope=1;}
   else if(page==GLOBAL)transpose=clamp(transpose+d,-12,12);
+#if defined(FOMA_NATIVE_WIFI) && FOMA_NATIVE_WIFI
+  else if(native_edit_page())motion_adjust(ch,editParameter,d);
+#else
   else if(page==SECTION_SOUND)motion_adjust(ch,editParameter,d);
+#endif
   else if(page==MOTION&&ch)motion[ch]=clamp(motion[ch]+d,0,32);
   else if(page==SEQ){
    uint8_t *note=&p.pat[section][ch][cursor];
@@ -1373,6 +1434,10 @@ void loop(void){
  d=encoder(ENC_KNOB4);if(d){
   if(page==SONG_DETAILS)songScope=wrap(songScope+d,COUNT(songScopes));
   else if(page==GLOBAL)octave=clamp(octave+d,-2,2);
+#if defined(FOMA_NATIVE_WIFI) && FOMA_NATIVE_WIFI
+  else if(page==ENV)motion_adjust(ch,PART_DECAY,d);
+  else if(page==MOTION)motion_adjust(ch,MOT_DEPTH,d);
+#endif
   else if(page==SECTION_SOUND)tune_part(&sectionMix[editSection][ch],PART_PAN,d);
   else if(page==SEQ){loopSection=wrap(loopSection+d,NS);section=loopSection;repeat=1;}
   else tails[ch]=clamp(tails[ch]+d,ch?9:5,ch?17:14);
@@ -1384,7 +1449,11 @@ void loop(void){
    *note=ch?(*note==EMPTY?(uint8_t)kd:EMPTY):(*note?0:(uint8_t)kd);
    if(ch?*note!=EMPTY:*note)sound(ch,*note);
   }else{
+#if defined(FOMA_NATIVE_WIFI) && FOMA_NATIVE_WIFI
+   if(native_edit_page()&&!recording)sound_at_root(ch,kd,songHarmony.root,editSection,p.style,100);
+#else
    if(page==SECTION_SOUND&&!recording)sound_at_root(ch,kd,songHarmony.root,editSection,p.style,100);
+#endif
    else sound(ch,kd);
    if(recording)p.pat[section][ch][playing?step:k%16]=(uint8_t)kd;
   }
