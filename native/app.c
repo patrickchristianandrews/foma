@@ -36,8 +36,9 @@ void app_say(const char *a,const char *b){(void)a;(void)b;}
 #ifdef PLAT_HOST
 extern int lw_wifi_expect(const char *,int *);
 extern int lw_radio_expect(const char *,int *);
+extern int lw_loop_expect(const char *,int *);
 static int app_expect(const char *name,int *v){
  if(!strcmp(name,"wifi_state")){*v=plat_wifi_state();return 1;}
- return lw_wifi_expect(name,v)||lw_radio_expect(name,v);
+ return lw_wifi_expect(name,v)||lw_radio_expect(name,v)||lw_loop_expect(name,v);
 }
 #endif
