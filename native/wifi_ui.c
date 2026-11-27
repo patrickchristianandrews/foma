@@ -82,3 +82,13 @@ void lw_wifi_draw(void){
  text(8,202,"GLO WI-FI ON/OFF",WHITE,FONT_SMALL);
  text(8,222,"ARP RADIO / HOME NEXT",dim,FONT_SMALL);
 }
+
+#ifdef PLAT_HOST
+#include <string.h>
+int lw_wifi_expect(const char *name,int *v){
+ if(!strcmp(name,"password_editing"))*v=editing;
+ else if(!strcmp(name,"password_length"))*v=len;
+ else return 0;
+ return 1;
+}
+#endif
