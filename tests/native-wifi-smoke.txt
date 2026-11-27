@@ -1,0 +1,9 @@
+wait 1000
+tapkey w0
+expect peak_db_min -45
+tap SAVE
+expect store_writes 1
+flash_fail 1
+tap SAVE
+expect store_tries 2
+expect store_writes 1

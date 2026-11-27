@@ -2,7 +2,7 @@ name: Native Wi-Fi integration build
 on:
   push:
     branches: [liquid-wave-fm1-development]
-    paths: ['native/**', 'src/**', '.github/workflows/native-wifi.yml']
+    paths: ['native/**', 'src/**', 'tests/native-wifi-smoke.txt', '.github/workflows/native-wifi.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -29,6 +29,14 @@ jobs:
         run: python3 -m pip install --break-system-packages Pillow
       - name: Compile native host simulator
         run: python3 "$RUNNER_TEMP/fm1-base/tools/build.py" "$GITHUB_WORKSPACE/native" --host
+      - name: Check native simulator audio and project saves
+        run: |
+          mkdir -p "$RUNNER_TEMP/liquid-wave-smoke"
+          native/build/host/liquid-wave-wifi_host tests/native-wifi-smoke.txt "$RUNNER_TEMP/liquid-wave-smoke"
+      - name: Check pinned flash driver chip recognition
+        run: |
+          cc -std=c99 -Wall -Wextra -Werror "$RUNNER_TEMP/fm1-base/tests/flash_ok_test.c" -o "$RUNNER_TEMP/flash-ok-test"
+          "$RUNNER_TEMP/flash-ok-test"
       - name: Fetch pi32v2 toolchain and AC79 SDK
         run: |
           sh "$RUNNER_TEMP/fm1-base/tools/get_toolchain.sh"

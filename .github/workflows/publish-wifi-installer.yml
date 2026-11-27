@@ -1,8 +1,5 @@
 name: Publish compiled experimental Wi-Fi installer
 on:
-  push:
-    branches: [liquid-wave-fm1-development]
-    paths: ['.github/workflows/publish-wifi-installer.yml']
   workflow_dispatch:
 permissions:
   contents: write
@@ -17,7 +14,7 @@ jobs:
       - name: Retrieve exact successful Wi-Fi build
         run: |
           gh run download 45926545716 --repo "$GITHUB_REPOSITORY" --name liquid-wave-wifi-experimental --dir /tmp/wifi-package
-          test "$(stat -c%s /tmp/wifi-package/liquid-wave-wifi.fwsc)" = 611496
+          printf '%s  %s\n' '84795d4baa30fad32d7f3491b8697da87b5023330d55bfaa796df50b696312ca' /tmp/wifi-package/liquid-wave-wifi.fwsc | sha256sum --check
           git clone https://github.com/charlesvestal/fm1-base.git /tmp/fm1-base
           git -C /tmp/fm1-base checkout 6d6ae6d874fb34e2bec3fc6043fa7d859b206462
       - name: Assemble upstream USB installer with exact Wi-Fi package
@@ -37,7 +34,13 @@ jobs:
               return re.sub(r'^import .*?;\n','',re.sub(r'^export\s+','',s,flags=re.M),flags=re.M)
           lib='\n'.join(strip((base/'web'/name).read_text()) for name in ('fm1pkg.js','fm1ota.js'))
           html=(base/'web/installer.html').read_text()
-          meta={'version':'Experimental Wi-Fi + Radio','product':product,'pkg':'firmware.fwsc','backup':False,'boot':None}
+          digest=hashlib.sha256(raw).hexdigest()
+          meta={'version':'Experimental Wi-Fi + Radio','product':product,'pkg':'firmware.fwsc','sha256':digest,'backup':False,'boot':None}
+          package_check='if (productOf(pkg) !== meta.product) { sayK("badpkg"); return; }'
+          assert html.count(package_check)==1
+          html=html.replace(package_check,'''const hash = await crypto.subtle.digest("SHA-256", pkg);
+              const hex = [...new Uint8Array(hash)].map((b) => b.toString(16).padStart(2, "0")).join("");
+              if (hex !== meta.sha256 || productOf(pkg) !== meta.product) { sayK("badpkg"); return; }''')
           assert html.count('/*LIB*/')==html.count('/*META*/')==1
           html=html.replace('/*LIB*/',lib).replace('/*META*/',json.dumps(meta))
           for key,value in {'NAME':'Advanced Liquid Wave Wi-Fi + Radio','REPO':'https://github.com/patrickchristianandrews/foma','REPO_SHORT':'github.com/patrickchristianandrews/foma','LICENSE':'GPL-3.0 / MPL-2.0 components','CREDITS':' Native Wi-Fi and radio integration, based on FM1 Radio by Charles Vestal.'}.items():
@@ -45,7 +48,7 @@ jobs:
           assert not re.search(r'\{\{[A-Z_]+\}\}',html)
           html=re.sub(r'(<body[^>]*>)',r'\1<p style="margin:12px;padding:12px;border:2px solid #b77836"><strong>Experimental Wi-Fi firmware:</strong> compiled successfully; real hardware and radio playback not yet tested. Back up your FM-1 first. This edition excludes Bluetooth, AAC and Frodhes. <a href="/liquid-wave/">Back to Liquid Wave</a></p>',html,count=1)
           (out/'index.html').write_text(html)
-          (out/'release.json').write_text(json.dumps({'revision':'28a4ab3b510168f47e5b496be9ea0426d9b8582c','product':product,'firmware_sha256':hashlib.sha256(raw).hexdigest(),'hardware_tested':False},indent=2))
+          (out/'release.json').write_text(json.dumps({'revision':'28a4ab3b510168f47e5b496be9ea0426d9b8582c','product':product,'firmware_sha256':digest,'hardware_tested':False},indent=2))
           with zipfile.ZipFile('/tmp/Advanced-Liquid-Wave-WiFi-installer.zip','w',zipfile.ZIP_DEFLATED) as z:
               for file in sorted(out.iterdir()):
                   z.write(file,file.name)

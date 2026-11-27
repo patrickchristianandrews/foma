@@ -75,3 +75,4 @@ void lw_native_render(int32_t *lr,uint32_t n,uint32_t gain){
  lw_radio_mix(lr,n,gain);
 }
 void lw_native_panic(void){muted=1;}
+void lw_native_resume(void){muted=0;}
