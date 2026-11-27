@@ -8,10 +8,8 @@ ble = false
 usb_audio_in = false
 usb_audio_out = false
 include = ["../platform", "../src"]
-o2 = ["platform.c", "graphics.c", "wifi_ui.c", "radio_bridge.c", "reference/third_party/pvaac/*.c", "../src/main.c", "../src/liquid_song.c", "../src/weather.c", "../src/weather_parse.c"]
-o2_cflags = ["-DFOMA_BLUETOOTH=0", "-DFOMA_USB_AUDIO=0", "-DFOMA_TRS_MIDI=0", "-DFOMA_MIDI_CLOCK=0", "-DFOMA_NATIVE_WIFI=1", "-DAAC_PLUS"]
-o2_include = ["reference/third_party/pvaac/pv_fm1.h"]
-rom_check_skip = ["pv_log2"]
+o2 = ["platform.c", "graphics.c", "wifi_ui.c", "radio_bridge.c", "../src/main.c", "../src/liquid_song.c", "../src/weather.c", "../src/weather_parse.c"]
+o2_cflags = ["-DFOMA_BLUETOOTH=0", "-DFOMA_USB_AUDIO=0", "-DFOMA_TRS_MIDI=0", "-DFOMA_MIDI_CLOCK=0", "-DFOMA_NATIVE_WIFI=1", "-Drandom32=lw_random32"]
 vendored = ["reference/third_party/"]
 device_include = ["reference/third_party/compat"]
 net = ["reference/net/radio_net.c", "reference/third_party/bearssl/src/**/*.c"]
