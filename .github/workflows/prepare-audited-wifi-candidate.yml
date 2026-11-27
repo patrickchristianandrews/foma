@@ -1,0 +1,74 @@
+name: Package audited Wi-Fi hardware-test candidate
+on:
+  push:
+    branches: [liquid-wave-fm1-development]
+    paths: ['.github/workflows/prepare-audited-wifi-candidate.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  candidate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      GH_TOKEN: ${{ github.token }}
+      CANDIDATE_SHA: d86e965bab0fb91e175f7be2118f8750380f4b56
+      AUDIT_RUN: '45931694707'
+      DEVICE_RUN: '45931694566'
+    steps:
+      - name: Require both successful workflows on the exact candidate revision
+        run: |
+          set -euo pipefail
+          for run in "$AUDIT_RUN" "$DEVICE_RUN"; do
+            actual=$(gh run view "$run" --repo "$GITHUB_REPOSITORY" --json headSha --jq .headSha)
+            test "$actual" = "$CANDIDATE_SHA"
+            gh run watch "$run" --repo "$GITHUB_REPOSITORY" --exit-status --interval 15
+            test "$(gh run view "$run" --repo "$GITHUB_REPOSITORY" --json conclusion --jq .conclusion)" = success
+          done
+      - name: Download verified device build and pinned USB installer source
+        run: |
+          gh run download "$DEVICE_RUN" --repo "$GITHUB_REPOSITORY" --name liquid-wave-wifi-experimental --dir /tmp/wifi
+          git clone https://github.com/charlesvestal/fm1-base.git /tmp/base
+          git -C /tmp/base checkout 6d6ae6d874fb34e2bec3fc6043fa7d859b206462
+      - name: Assemble separate hardware-test installer and verify package
+        run: |
+          python3 - <<'PY'
+          import hashlib,json,os,pathlib,re,shutil
+          base=pathlib.Path('/tmp/base')
+          out=pathlib.Path('candidate')
+          out.mkdir()
+          raw=pathlib.Path('/tmp/wifi/liquid-wave-wifi.fwsc').read_bytes()
+          product=''.join(chr((raw[i*48+47]-i-1)&255) for i in range(20) if raw[i*48+47]!=125)
+          assert product=='FM-1_9600' and b'FELUCCA-LOADER-1' in raw
+          digest=hashlib.sha256(raw).hexdigest()
+          (out/'firmware.fwsc').write_bytes(raw)
+          def strip(s):
+              return re.sub(r'^import .*?;\n','',re.sub(r'^export\s+','',s,flags=re.M),flags=re.M)
+          lib='\n'.join(strip((base/'web'/name).read_text()) for name in ('fm1pkg.js','fm1ota.js'))
+          html=(base/'web/installer.html').read_text()
+          meta={'version':'Audited hardware-test candidate','product':product,'pkg':'firmware.fwsc','sha256':digest,'backup':False,'boot':None}
+          check='if (productOf(pkg) !== meta.product) { sayK("badpkg"); return; }'
+          assert html.count(check)==1
+          html=html.replace(check,'''const hash = await crypto.subtle.digest("SHA-256", pkg);
+              const hex = [...new Uint8Array(hash)].map(b => b.toString(16).padStart(2,"0")).join("");
+              if (hex !== meta.sha256 || productOf(pkg) !== meta.product) { sayK("badpkg"); return; }''')
+          assert html.count('/*LIB*/')==1 and html.count('/*META*/')==1
+          html=html.replace('/*LIB*/',lib).replace('/*META*/',json.dumps(meta))
+          for k,v in {'NAME':'Advanced Liquid Wave Wi-Fi + Radio','REPO':'https://github.com/patrickchristianandrews/foma','REPO_SHORT':'github.com/patrickchristianandrews/foma','LICENSE':'GPL-3.0 / MPL-2.0 components','CREDITS':' Native Wi-Fi radio integration based on FM1 Radio.'}.items():
+              html=html.replace('{{'+k+'}}',v)
+          assert not re.search(r'\{\{[A-Z_]+\}\}',html)
+          html=re.sub(r'(<body[^>]*>)',r'\1<p style="padding:12px;border:2px solid #b77836"><strong>Hardware-test candidate only.</strong> Automated checks passed, but real FM-1 operation and recovery remain unverified. Use a backed-up test unit only. Do not flash an irreplaceable device. Do not disconnect USB during a write.</p>',html,count=1)
+          (out/'index.html').write_text(html)
+          (out/'release.json').write_text(json.dumps({'revision':os.environ['CANDIDATE_SHA'],'product':product,'firmware_sha256':digest,'audit_run':os.environ['AUDIT_RUN'],'device_run':os.environ['DEVICE_RUN'],'hardware_tested':False},indent=2))
+          (out/'READ-ME.txt').write_text('Hardware-test candidate only. Automated audits and device compilation passed. Physical installation, recovery, Wi-Fi and radio tests are required before promotion. Extract all files and serve from localhost over HTTP (python3 -m http.server 8080). Open http://localhost:8080/ in Chrome or Edge with the FM-1 attached by USB. Back up settings first and read the recovery instructions. Existing public release is unchanged.\n')
+          assert digest==hashlib.sha256((out/'firmware.fwsc').read_bytes()).hexdigest()
+          assert 'id="go"' in html and digest in html
+          print('Candidate SHA256:',digest)
+          PY
+      - name: Upload separate test candidate (no public release)
+        uses: actions/upload-artifact@v4
+        with:
+          name: Advanced-Liquid-Wave-WiFi-audited-hardware-test
+          path: candidate/
+          if-no-files-found: error
