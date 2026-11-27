@@ -492,6 +492,11 @@ static void battery_hud(void){
  for(int i=0;i<n;i++)rect(211+i*8,6,6,6,n==1?RGB(255,155,65):RGB(100,220,150));
  if(n==0)rect(211,6,2,6,RGB(255,70,70));
 }
+/* Celsius tenths remain the internal weather/music unit. Round display to °F. */
+static int weather_fahrenheit(int c10){
+ int f50=c10*9+1600;
+ return (f50+(f50>=0?25:-25))/50;
+}
 static void weather_hud(uint32_t now){
  const uint16_t peach=RGB(255,174,117), purple=RGB(183,137,235), dim=RGB(103,66,76);
  const uint16_t sky=RGB(18,17,37);
@@ -602,10 +607,10 @@ static void weather_hud(uint32_t now){
  if(live){
   text(8,205,liquid_weather_condition(code),WHITE,FONT_SMALL);
   text(8,38,"LIVE",RGB(90,220,150),FONT_SMALL);
-  format_int(value,weather.reading.temperature10/10);text(185,205,value,WHITE,FONT_SMALL);text(210,205,"C",peach,FONT_SMALL);
+  format_int(value,weather_fahrenheit(weather.reading.temperature10));text(170,205,value,WHITE,FONT_SMALL);text(215,205,"F",peach,FONT_SMALL);
   }else {
   text(8,205,moon?"LUNAR MODE":liquid_weather_condition(code),WHITE,FONT_SMALL);
-  if(!moon){format_int(value,offlineTemp);text(124,205,value,WHITE,FONT_SMALL);text(150,205,"C",peach,FONT_SMALL); 
+  if(!moon){format_int(value,weather_fahrenheit(offlineTemp*10));text(115,205,value,WHITE,FONT_SMALL);text(150,205,"F",peach,FONT_SMALL); 
 #if defined(FOMA_NATIVE_WIFI) && FOMA_NATIVE_WIFI
   text(170,205,lw_weather_status(),purple,FONT_SMALL);
 #else
@@ -618,7 +623,7 @@ static void weather_hud(uint32_t now){
  if(live){
   char clock[6]={(char)('0'+minute/600),(char)('0'+minute/60%10),':',(char)('0'+minute%60/10),(char)('0'+minute%10),0};
   text(8,222,"LOCAL TIME",peach,FONT_SMALL);text(110,222,clock,WHITE,FONT_SMALL);
- }else text(8,222,"K1 SKY K2 HR K3 C K4 WIND",peach,FONT_SMALL);
+ }else text(8,222,"K1 SKY K2 HR K3 F K4 WIND",peach,FONT_SMALL);
  if(ambientLevel)text(8,35,"AMB",purple,FONT_SMALL);
  if(animalLevel)text(34,35,"CALL",purple,FONT_SMALL);
  if(weather.playing)rect(196,8,7,7,purple);
