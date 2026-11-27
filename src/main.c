@@ -17,6 +17,11 @@
 #endif
 #endif
 #include "weather.h"
+#if defined(FOMA_NATIVE_WIFI) && FOMA_NATIVE_WIFI
+void lw_wifi_draw(void);
+int lw_wifi_step(void);
+void lw_wifi_leave(void);
+#endif
 #define NC 8
 #define NS 5
 #define NV 12
@@ -871,6 +876,9 @@ static void song_details_hud(void){
  text(8,222,"ARP REMIX / HOME RADIO",ink,FONT_SMALL);
 }
 static void radio_hud(void){
+#if defined(FOMA_NATIVE_WIFI) && FOMA_NATIVE_WIFI
+ lw_wifi_draw();battery_hud();return;
+#endif
  rect(0,0,240,240,BLACK);
  text(8,5,"4 / ONLINE RADIO",RGB(103,212,250),FONT_SMALL);
  text(8,36,"INTERNET RADIO",WHITE,FONT_BIG);
@@ -954,7 +962,10 @@ static void panel_lights(uint32_t now){
   if(ambientLevel)active|=LIT(BTN_ENV);
   if(animalLevel)active|=LIT(BTN_LFO);
  }else if(page==RADIO){
-  /* Native radio is not connected: don't advertise unsupported controls. */
+  /* Advertise only the controls implemented by this build. */
+#if defined(FOMA_NATIVE_WIFI) && FOMA_NATIVE_WIFI
+  available=LIT(BTN_SEL)|LIT(BTN_SAVE)|LIT(BTN_GLO)|LIT(BTN_EDIT)|LIT(BTN_PLAY);
+#endif
  }else if(page==CATALOG){
   available=LIT(BTN_PLAY)|LIT(BTN_ARP);
   if(catalogPlaying)active|=LIT(BTN_PLAY);
@@ -1093,7 +1104,11 @@ void loop(void){
  }
  if(button_pressed(BTN_HOME)){
   if(page==SONG_DETAILS){page=RADIO;radio_hud();lastHud=now;panel_lights(now);return;}
-  if(page==RADIO){if(playing){playing=0;releaseRequested=1;}page=CATALOG;catalog_hud();lastHud=now;panel_lights(now);return;}
+  if(page==RADIO){
+#if defined(FOMA_NATIVE_WIFI) && FOMA_NATIVE_WIFI
+ lw_wifi_leave();
+#endif
+ if(playing){playing=0;releaseRequested=1;}page=CATALOG;catalog_hud();lastHud=now;panel_lights(now);return;}
   if(page==CATALOG)catalog_stop();
   if(page==HOME&&!skippedBoot){
    page=WEATHER;
@@ -1120,6 +1135,9 @@ void loop(void){
   panel_lights(now);return;
  }
  if(page==RADIO){
+#if defined(FOMA_NATIVE_WIFI) && FOMA_NATIVE_WIFI
+  if(lw_wifi_step())lastHud=now-1000u;
+#endif
   if(now-lastHud>=1000){lastHud=now;radio_hud();}
   int catchup=0;while(playing&&(int32_t)(now-due)>=0&&catchup++<4){transport();due+=15000/p.bpm;remMs+=15000%p.bpm;if(remMs>=p.bpm){remMs-=p.bpm;due++;}}
   panel_lights(now);return;
