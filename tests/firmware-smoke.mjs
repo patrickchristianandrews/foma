@@ -84,8 +84,20 @@ assert(portraitColors.size >= 12, 'Tidbit is a full-color portrait on Steps');
 fm1.tap(REC);
 assert(fm1.led(REC), 'Record control');
 fm1.tap(REC);
-fm1.tap(EDIT);
-fm1.tap(EDIT);
+fm1.tap(SAVE);
+const beforeSeqPreset=fm1.store();
+fm1.turn(1,1);
+fm1.tap(SAVE);
+assert.notEqual(fm1.store()[648+7],beforeSeqPreset[648+7],'SEQ ALGORITHM selects actual character instrument');
+fm1.advance(2500);
+fm1.tap(5); // LFO / Motion
+fm1.advance(160);
+const motionPage=fm1.frame();
+fm1.tap(4); // ENV opens the same editor
+fm1.advance(160);
+assert.deepEqual(fm1.frame(),motionPage,'ENV and LFO share one motion editor');
+fm1.tap(EDIT); // compatibility shortcut to same page
+assert(fm1.led(5)&&fm1.led(4),'motion and envelope LEDs indicate shared editor');
 fm1.turn(KNOB1, 1);
 fm1.turn(KNOB4, -100);
 assert.deepEqual(fm1.audition(), [true,false], 'edited track pans hard left in Verse');

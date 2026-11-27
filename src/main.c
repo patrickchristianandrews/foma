@@ -676,7 +676,10 @@ static void stage_splash(int i,uint32_t now){
 }
 static void stage_surface(void){surface_patch(0,240);}
 enum { PART_LEVEL, PART_PITCH, PART_DEPTH, PART_DECAY, PART_RATIO, PART_PAN, PART_PARAMS };
-static const char *partParams[]={"LEVEL","PITCH","FM / DRIVE","DECAY","FM RATIO","PAN"};
+enum { MOT_ATTACK=PART_PARAMS,MOT_RATE,MOT_DEPTH,MOT_PARAMS };
+static const char *partParams[]={"LEVEL","PITCH","FM / DRIVE","DECAY","FM RATIO","PAN","ATTACK MS","LFO RATE","LFO DEPTH"};
+static int motion_value(int ch,int param);
+static void motion_adjust(int ch,int param,int d);
 static int8_t *part_value(SectionSound *part,int param){
  switch(param){
   case PART_LEVEL:return &part->level;
@@ -691,6 +694,43 @@ static void tune_part(SectionSound *part,int param,int delta){
  static const int limit[]={100,24,72,8,7,100};
  int8_t *value=part_value(part,param);
  *value=(int8_t)clamp(*value+delta,-limit[param],limit[param]);
+}
+static int motion_value(int ch,int param){
+ if(param==MOT_ATTACK)return attackMs[ch];
+ if(param==MOT_RATE)return lfoRate[ch];
+ if(param==MOT_DEPTH)return motion[ch];
+ return *part_value(&sectionMix[editSection][ch],param);
+}
+static void motion_adjust(int ch,int param,int d){
+ if(param==MOT_ATTACK){if(ch)attackMs[ch]=clamp(attackMs[ch]+d,0,100);}
+ else if(param==MOT_RATE){if(ch)lfoRate[ch]=clamp(lfoRate[ch]+d,0,20);}
+ else if(param==MOT_DEPTH){if(ch)motion[ch]=clamp(motion[ch]+d,0,32);}
+ else if(param!=PART_RATIO||ch)tune_part(&sectionMix[editSection][ch],param,d);
+}
+static void motion_hud(void){
+ uint16_t violet=RGB(190,120,255),ink=RGB(103,212,250);
+ char value[12];
+ rect(0,0,240,240,BLACK);
+ text(8,3,"LIQUID WAVE",violet,FONT_SMALL);battery_hud();
+ text(8,22,"MOTION / ENVELOPE",WHITE,FONT_SMALL);
+ text(8,42,names[p.sel],colors[p.sel],FONT_SMALL);
+ text(80,42,instrument(p.sel)->name,WHITE,FONT_SMALL);
+ text(8,60,"K1",violet,FONT_SMALL);
+ text(35,60,sections[editSection],ink,FONT_SMALL);
+ text(120,60,editParameter>=PART_PARAMS?"ALL SECTIONS":"SECTION",ink,FONT_SMALL);
+ int first=clamp(editParameter-2,0,MOT_PARAMS-6);
+ for(int i=first;i<first+6;i++){
+  int y=80+(i-first)*18;
+  uint16_t color=i==editParameter?RGB(255,190,237):WHITE;
+  if(i==editParameter)rect(3,y,234,17,RGB(50,30,70));
+  text(8,y,i==editParameter?">":" ",color,FONT_SMALL);
+  text(24,y,partParams[i],color,FONT_SMALL);
+  if(!p.sel&&(i==PART_RATIO||i>=PART_PARAMS))text(176,y,"N/A",color,FONT_SMALL);
+  else {format_int(value,motion_value(p.sel,i));text(176,y,value,color,FONT_SMALL);}
+ }
+ text(8,190,"K2 PARAM / K3 VALUE",violet,FONT_SMALL);
+ text(8,207,"K4 PAN / SELECT CHARACTER",WHITE,FONT_SMALL);
+ text(8,224,"SEQ INSTRUMENT / HOME",ink,FONT_SMALL);
 }
 static void song_details_hud(void){
  char value[12];
@@ -734,22 +774,8 @@ static void hud(void){
  if(page==SONG_DETAILS){song_details_hud();return;}
  if(page==RADIO){radio_hud();return;}
  if(page==WEATHER){weather_hud(millis());return;}
- if(page==SECTION_SOUND){
-  SectionSound *part=&sectionMix[editSection][p.sel];
-  rect(0,48,240,145,BLACK);
-  text(8,49,sections[editSection],WHITE,FONT_SMALL);
-  text(117,49,names[p.sel],colors[p.sel],FONT_SMALL);
-  for(int i=0;i<PART_PARAMS;i++){
-   char value[12];
-   int y=68+i*16;
-   uint16_t ink=i==editParameter?RGB(255,190,237):WHITE;
-   text(8,y,i==editParameter?">":" ",ink,FONT_SMALL);
-   text(24,y,partParams[i],ink,FONT_SMALL);
-   if(i==PART_RATIO&&!p.sel)text(160,y,"-",ink,FONT_SMALL);
-   else {format_int(value,*part_value(part,i));text(160,y,value,ink,FONT_SMALL);}
-  }
-  text(8,170,"K3 ADJUST / K4 PAN",WHITE,FONT_SMALL);
- }else if(page!=HOME){
+ if(page==SECTION_SOUND||page==MOTION||page==ENV||page==EDIT){motion_hud();return;}
+ if(page!=HOME){
   rect(0,48,240,145,BLACK);
   text(8,60,names[p.sel],colors[p.sel],FONT_SMALL);
   text(72,60,instrument(p.sel)->name,WHITE,FONT_SMALL);
@@ -761,13 +787,13 @@ static void hud(void){
   if(page==GLOBAL){labels[0]="MASTER";values[0]=masterLevel;labels[1]="KEY";values[1]=transpose;labels[2]="OCTAVE";values[2]=octave;}
   if(page==SEQ){labels[0]="STEP";values[0]=cursor+1;labels[1]="LOOP";values[1]=repeat;labels[2]="SECTION";values[2]=section+1;}
   for(int i=0;i<(page==GLOBAL||page==SEQ?3:6);i++){char value[12];format_int(value,values[i]);text(8,80+i*17,labels[i],WHITE,FONT_SMALL);text(135,80+i*17,value,WHITE,FONT_SMALL);}
-  if(page==SEQ)for(int i=0;i<NC;i++)portrait_at(i,3+30*i,151);
+  if(page==SEQ){for(int i=0;i<NC;i++)portrait_at(i,3+30*i,151);text(8,175,"K2 STEP K3 NOTE K4 PART",RGB(190,120,255),FONT_SMALL);}
  }
 
  rect(0,0,240,48,BLACK);text(0,0,"LIQUID WAVE",RGB(190,120,255),FONT_SMALL);text(125,0,pageName[page],WHITE,FONT_SMALL);battery_hud();
  text(0,16,liquid_song_style_name(p.style),WHITE,FONT_SMALL);char b[12];format_int(b,p.bpm);text(112,16,b,WHITE,FONT_SMALL);
  const char *guide=page==SECTION_SOUND?"K1 SECTION / K2 PARAM":
-  page==FX?"K2 PARAM / K3 VALUE":page==ENV?"K2 ATTACK / K4 TAIL":page==MOTION?"K2 RATE / K3 DEPTH":(page==EDIT||page==HOME||page==MIX)?"SELECT / ALGO SOUND":!p.sel&&page!=GLOBAL&&page!=SEQ?"TEMPO  LEVEL DRIVE TAIL":knobGuide[page];
+  page==SEQ?"SELECT / ALGO SOUND":page==FX?"K2 PARAM / K3 VALUE":page==ENV?"K2 ATTACK / K4 TAIL":page==MOTION?"K2 RATE / K3 DEPTH":(page==EDIT||page==HOME||page==MIX)?"SELECT / ALGO SOUND":!p.sel&&page!=GLOBAL&&page!=SEQ?"TEMPO  LEVEL DRIVE TAIL":knobGuide[page];
  text(0,32,guide,WHITE,FONT_SMALL);
  rect(0,194,240,46,BLACK);text(0,194,sections[section],WHITE,FONT_SMALL);
  text(96,194,names[p.sel],colors[p.sel],FONT_SMALL);text(192,194,recording?"REC":"",WHITE,FONT_SMALL);
@@ -916,11 +942,9 @@ void loop(void){
   led_button(BTN_HOME,1);led_button(BTN_PLAY,playing);return;
  }
  if(button_pressed(BTN_SEL))p.mute^=1<<p.sel;
- if(button_pressed(BTN_ENV))page=ENV;
- if(button_pressed(BTN_LFO))page=MOTION;
- if(button_pressed(BTN_EDIT)){
-  if(page==EDIT){page=SECTION_SOUND;editSection=section;editParameter=PART_LEVEL;}
-  else page=EDIT;
+ if(button_pressed(BTN_ENV)||button_pressed(BTN_LFO)||button_pressed(BTN_EDIT)){
+  if(page!=SECTION_SOUND){editSection=section;editParameter=PART_LEVEL;}
+  page=SECTION_SOUND;
  }
  if(button_pressed(BTN_GLO))page=GLOBAL;
  if(button_pressed(BTN_FX))page=FX;
@@ -943,7 +967,7 @@ void loop(void){
  d=encoder(ENC_PRESETS);if(d){p.style=(uint8_t)wrap(p.style+d,LW_STYLE_COUNT);if(page==SONG_DETAILS)scoped_generate();else generate();pos=0;due=now;remMs=0;}
  int ch=p.sel;
  d=encoder(ENC_ALGORITHM);if(d){
-  if(page==EDIT||page==HOME||page==MIX||page==SONG_DETAILS){chooseInstrument(ch,preset[ch]+d);if(page==HOME)page=MIX;if(!playing)sound(ch,ch?0:7);}
+  if(page==EDIT||page==HOME||page==MIX||page==SONG_DETAILS||page==SEQ){chooseInstrument(ch,preset[ch]+d);if(page==HOME)page=MIX;if(!playing)sound(ch,ch?0:7);}
   else if(page==SECTION_SOUND){if(ch)tune_part(&sectionMix[editSection][ch],PART_RATIO,d);}
   else if(ch)shape[ch]=(uint8_t)wrap(shape[ch]+d,8);
   else drive[0]=clamp(drive[0]+d,0,40);
@@ -955,7 +979,7 @@ void loop(void){
  d=encoder(ENC_KNOB2);if(d){
   if(page==SONG_DETAILS){songHarmony.root=(int8_t)(wrap(songHarmony.root+d+6,12)-6);if(songScope==0)songScope=1;}
   else if(page==GLOBAL)masterLevel=clamp(masterLevel+d,0,100);
-  else if(page==SECTION_SOUND)editParameter=wrap(editParameter+d,PART_PARAMS);
+  else if(page==SECTION_SOUND)editParameter=wrap(editParameter+d,MOT_PARAMS);
   else if(page==SEQ)cursor=wrap(cursor+d,16);
   else if(page==FX)fxParameter=wrap(fxParameter+d,5);
   else if(page==ENV)attackMs[ch]=clamp(attackMs[ch]+d,0,100);
@@ -965,9 +989,7 @@ void loop(void){
  d=encoder(ENC_KNOB3);if(d){
   if(page==SONG_DETAILS){songDensity=clamp(songDensity+d,0,4);if(songScope==0)songScope=1;}
   else if(page==GLOBAL)transpose=clamp(transpose+d,-12,12);
-  else if(page==SECTION_SOUND){
-   if(editParameter!=PART_RATIO || ch)tune_part(&sectionMix[editSection][ch],editParameter,d);
-  }
+  else if(page==SECTION_SOUND)motion_adjust(ch,editParameter,d);
   else if(page==MOTION&&ch)motion[ch]=clamp(motion[ch]+d,0,32);
   else if(page==SEQ){
    uint8_t *note=&p.pat[section][ch][cursor];
@@ -1013,6 +1035,6 @@ void loop(void){
  if(now-lastHud>=140){lastHud=now;hud();}
  led_button(BTN_PLAY,playing);led_button(BTN_REC,recording);
  led_button(BTN_HOME,page==HOME||page==SONG_DETAILS);led_button(BTN_SEQ,page==SEQ);led_button(BTN_FX,page==FX);
- led_button(BTN_ENV,page==ENV);led_button(BTN_LFO,page==MOTION);led_button(BTN_EDIT,page==EDIT||page==SECTION_SOUND);
+ led_button(BTN_ENV,page==SECTION_SOUND);led_button(BTN_LFO,page==SECTION_SOUND);led_button(BTN_EDIT,page==SECTION_SOUND);
  led_button(BTN_GLO,page==GLOBAL);led_button(BTN_SEL,(p.mute&(1<<p.sel))!=0);
 }
