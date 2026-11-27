@@ -54,7 +54,7 @@ static const struct {const char *city,*country;} cities[]={
 static unsigned city,station,search_city;
 static int station_valid;
 static int browsing,requested,lookup,active;
-static volatile int volume=65;
+static volatile int volume=85;
 static char url[96],title[32]="Groove Salad",fav_id[12],fav_title[32];
 static const char *notice="";
 static const char fallback[]="http://ice4.somafm.com/groovesalad-128-mp3";
@@ -155,6 +155,12 @@ void lw_radio_mix(int32_t *lr,uint32_t n,uint32_t gain){
   const int16_t *a=&pcm_buf[(r%PCM_FRAMES)*2u],*b=r+1u!=w?&pcm_buf[((r+1u)%PCM_FRAMES)*2u]:a;
   for(unsigned ch=0;ch<2;ch++){
    int32_t sample=(int32_t)a[ch]+((int32_t)(b[ch]-a[ch])*(int32_t)(radio_frac>>1)>>15);
+   /* +6 dB radio makeup, soft knee before the independent volume control. */
+   int32_t a=sample<0?-sample:sample;
+   a*=2;
+   if(a>22000)a=22000+(a-22000)/5;
+   if(a>32000)a=32000;
+   sample=sample<0?-a:a;
    int32_t s=lr[i*2u+ch]+(sample*g/100*(int32_t)gain/4096)*256;
    lr[i*2u+ch]=s>8388607?8388607:s<-8388608?-8388608:s;
   }
