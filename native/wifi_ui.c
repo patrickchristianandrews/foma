@@ -68,5 +68,5 @@ void lw_wifi_draw(void){
  }
  text(8,184,"SEL SCAN / SAVE JOIN",WHITE,FONT_SMALL);
  text(8,202,"GLO WI-FI ON/OFF",WHITE,FONT_SMALL);
- text(8,222,"HOME NEXT SCREEN",dim,FONT_SMALL);
+ text(8,222,"ARP RADIO / HOME NEXT",dim,FONT_SMALL);
 }
