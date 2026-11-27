@@ -34,7 +34,7 @@ static int native_radio_mode;
 
 typedef struct { uint32_t magic; uint8_t style,bpm,sel,mute; uint8_t pat[NS][NC][16]; } Project;
 static Project p;
-enum {HOME, MIX, ENV, MOTION, EDIT, GLOBAL, FX, SEQ, SECTION_SOUND, WEATHER, SONG_DETAILS, RADIO, CATALOG};
+enum {HOME, MIX, ENV, MOTION, EDIT, GLOBAL, FX, SEQ, SECTION_SOUND, WEATHER, SONG_DETAILS, RADIO, CATALOG, LOOP_BUILDER};
 static int page, cursor, octave, loopSection, repeat, transpose;
 static volatile int masterLevel=100;
 static uint8_t level[8]={85,85,85,85,85,85,85,85};
@@ -1069,8 +1069,123 @@ static void sound_menu_hud(void){
  text(8,220,"SEL BACK / HOME STAGE",cyan,FONT_SMALL);
 }
 #endif
+#if defined(FOMA_NATIVE_WIFI) && FOMA_NATIVE_WIFI
+/* An independent, single repeating pattern. Never writes p.pat or songHarmony. */
+static uint8_t lb_notes[NC][16],lb_undo[16];
+static int lb_ready,lb_track,lb_cursor,lb_note,lb_length=16,lb_bpm=110;
+static int lb_playing,lb_step,lb_last=-1,lb_undo_track=-1,lb_variation;
+static uint32_t lb_due,lb_rem;
+static const char *const lb_tracks[]={"DRUMS","BASS","KEYS","LEAD","PAD","PLUCK","FX","TIDBIT"};
+static int lb_on(int ch,int i){return ch?lb_notes[ch][i]!=EMPTY:lb_notes[ch][i]!=0;}
+static void lb_snapshot(void){
+ lb_undo_track=lb_track;
+ for(int i=0;i<16;i++)lb_undo[i]=lb_notes[lb_track][i];
+}
+static void lb_fill(void){
+ lb_snapshot();
+ int variation=lb_variation++%3;
+ for(int i=0;i<16;i++){
+  if(!lb_track){
+   int kick=variation==0?i%4==0:variation==1?(i==0||i==6||i==8||i==14):(i==0||i==3||i==8||i==11);
+   lb_notes[0][i]=(kick?1:0)|(i%8==4?2:0)|(i%2==0?4:0)|(i==15&&variation?8:0);
+  }else {
+   int interval=lb_track==1?4:lb_track==4?8:variation==1?3:4;
+   static const uint8_t degrees[]={0,2,4,2,5,4,2,0};
+   lb_notes[lb_track][i]=i%interval==0?degrees[(i/interval+variation)%8]:EMPTY;
+  }
+ }
+}
+static void lb_init(void){
+ if(lb_ready)return;
+ lb_ready=1;
+ for(int c=0;c<NC;c++)for(int i=0;i<16;i++)lb_notes[c][i]=c?EMPTY:0;
+ lb_fill();lb_undo_track=-1;
+}
+static void lb_stop(void){lb_playing=0;lb_last=-1;releaseRequested=1;}
+static void lb_preview(int ch,int note){sound_at_root(ch,note,0,0,0,100);}
+static void lb_toggle(int i){
+ if(i<0||i>=lb_length)return;
+ lb_snapshot();lb_cursor=i;
+ if(lb_on(lb_track,i))lb_notes[lb_track][i]=lb_track?EMPTY:0;
+ else {int note=lb_track?lb_note:1<<lb_note;lb_notes[lb_track][i]=note; if(!lb_playing)lb_preview(lb_track,note);}
+}
+static void lb_service(uint32_t now){
+ if(!lb_playing)return;
+ for(int budget=0;budget<4&&(int32_t)(now-lb_due)>=0;budget++){
+  for(int c=0;c<NC;c++)if(lb_on(c,lb_step))lb_preview(c,lb_notes[c][lb_step]);
+  lb_last=lb_step;lb_step=(lb_step+1)%lb_length;
+  lb_due+=15000u/(unsigned)lb_bpm;lb_rem+=15000u%(unsigned)lb_bpm;
+  if(lb_rem>=(unsigned)lb_bpm){lb_due++;lb_rem-=lb_bpm;}
+ }
+}
+static void lb_input(uint32_t now){
+ int d=encoder(ENC_SELECT);
+ if(d){lb_track=wrap(lb_track+d,NC);lb_note=0;}
+ d=encoder(ENC_KNOB1);if(d){lb_bpm=clamp(lb_bpm+d,60,180);lb_rem=0;}
+ d=encoder(ENC_KNOB2);if(d)lb_cursor=wrap(lb_cursor+d,lb_length);
+ d=encoder(ENC_KNOB3);if(d){
+  lb_note=wrap(lb_note+d,lb_track?13:4);
+  if(lb_on(lb_track,lb_cursor)){lb_snapshot();lb_notes[lb_track][lb_cursor]=lb_track?lb_note:1<<lb_note;}
+  if(!lb_playing)lb_preview(lb_track,lb_track?lb_note:1<<lb_note);
+ }
+ d=encoder(ENC_KNOB4);if(d){
+  int n=lb_length==4?0:lb_length==8?1:2;
+  lb_length=4<<wrap(n+d,3);lb_step%=lb_length;lb_cursor%=lb_length;
+ }
+ if(button_pressed(BTN_PLAY)){if(lb_playing)lb_stop();else {lb_playing=1;lb_step=0;lb_due=now;lb_rem=0;}}
+ if(button_pressed(BTN_ARP))lb_fill();
+ if(button_pressed(BTN_SEL))lb_toggle(lb_cursor);
+ if(button_pressed(BTN_EDIT)){lb_snapshot();for(int i=0;i<16;i++)lb_notes[lb_track][i]=lb_track?EMPTY:0;}
+ if(button_pressed(BTN_REC)&&lb_undo_track>=0){
+  lb_track=lb_undo_track;lb_note=0;
+  for(int i=0;i<16;i++)lb_notes[lb_track][i]=lb_undo[i];
+  lb_undo_track=-1;
+ }
+ for(int k=0;k<16;k++)if(key_pressed(k))lb_toggle(k);
+ lb_service(now);
+}
+static void lb_hud(void){
+ uint16_t purple=RGB(190,120,255),cyan=RGB(103,212,250);
+ char b[12];rect(0,0,240,240,BLACK);
+ text(8,3,"6 / LOOP BUILDER",purple,FONT_SMALL);battery_hud();
+ text(8,22,lb_tracks[lb_track],colors[lb_track],FONT_SMALL);
+ text(88,22,lb_playing?"PLAYING":"READY",cyan,FONT_SMALL);
+ format_int(b,lb_bpm);text(178,22,b,WHITE,FONT_SMALL);
+ text(8,40,"SELECT TRACK / K1 BPM",WHITE,FONT_SMALL);
+ static const char *const drum[]={"KICK","SNARE","HAT","OPEN HAT"};
+ text(8,57,"K3 NOTE",purple,FONT_SMALL);
+ if(!lb_track)text(80,57,drum[lb_note],WHITE,FONT_SMALL);
+ else {format_int(b,lb_note+1);text(80,57,b,WHITE,FONT_SMALL);}
+ text(140,57,"K4 LEN",purple,FONT_SMALL);format_int(b,lb_length);text(211,57,b,WHITE,FONT_SMALL);
+ for(int i=0;i<16;i++){
+  int x=8+(i%4)*57,y=75+(i/4)*23;
+  uint16_t c=i>=lb_length?RGB(22,22,25):lb_on(lb_track,i)?colors[lb_track]:RGB(52,43,65);
+  rect(x,y,51,19,c);
+  if(i==lb_cursor)frame(x,y,51,19,WHITE);
+  if(lb_playing&&i==lb_last)frame(x+2,y+2,47,15,cyan);
+  format_int(b,i+1);text(x+4,y+1,b,lb_on(lb_track,i)&&i<lb_length?BLACK:WHITE,FONT_SMALL);
+ }
+ text(8,169,"KEYS 1-16 / SEL TOGGLE",WHITE,FONT_SMALL);
+ text(8,187,"K2 STEP / ARP AUTO FILL",purple,FONT_SMALL);
+ text(8,205,"EDIT CLEAR / REC UNDO",WHITE,FONT_SMALL);
+ text(8,222,"PLAY PREVIEW / HOME EXIT",cyan,FONT_SMALL);
+}
+#ifdef PLAT_HOST
+#include <string.h>
+int lw_loop_expect(const char *name,int *v){
+ if(!strcmp(name,"loop_page"))*v=page==LOOP_BUILDER;
+ else if(!strcmp(name,"loop_playing"))*v=lb_playing;
+ else if(!strcmp(name,"loop_track"))*v=lb_track;
+ else if(!strcmp(name,"loop_length"))*v=lb_length;
+ else if(!strcmp(name,"loop_steps")){*v=0;for(int i=0;i<lb_length;i++)*v+=lb_on(lb_track,i);}
+ else return 0;
+ return 1;
+}
+#endif
+#endif
 static void hud(void){
 #if defined(FOMA_NATIVE_WIFI) && FOMA_NATIVE_WIFI
+ if(page==LOOP_BUILDER){lb_hud();return;}
  if(page==FX){sound_menu_hud();return;}
 #endif
  if(page==SONG_DETAILS){song_details_hud();return;}
@@ -1128,6 +1243,11 @@ static void panel_lights(uint32_t now){
   /* Advertise only the controls implemented by this build. */
 #if defined(FOMA_NATIVE_WIFI) && FOMA_NATIVE_WIFI
   available=LIT(BTN_SEL)|LIT(BTN_SAVE)|LIT(BTN_GLO)|LIT(BTN_EDIT)|LIT(BTN_PLAY)|LIT(BTN_ARP)|LIT(BTN_SEQ);
+#endif
+#if defined(FOMA_NATIVE_WIFI) && FOMA_NATIVE_WIFI
+ }else if(page==LOOP_BUILDER){
+  available=LIT(BTN_PLAY)|LIT(BTN_ARP)|LIT(BTN_SEL)|LIT(BTN_EDIT)|LIT(BTN_REC);
+  if(lb_playing)active|=LIT(BTN_PLAY);
 #endif
  }else if(page==CATALOG){
   available=LIT(BTN_PLAY)|LIT(BTN_ARP);
@@ -1287,6 +1407,10 @@ void loop(void){
  lw_wifi_leave();lw_radio_leave();
 #endif
  if(playing){playing=0;releaseRequested=1;}page=CATALOG;catalog_hud();lastHud=now;panel_lights(now);return;}
+#if defined(FOMA_NATIVE_WIFI) && FOMA_NATIVE_WIFI
+  if(page==CATALOG){catalog_stop();if(playing){playing=0;releaseRequested=1;}lb_init();page=LOOP_BUILDER;lb_hud();lastHud=now;panel_lights(now);return;}
+  if(page==LOOP_BUILDER)lb_stop();
+#endif
   if(page==CATALOG)catalog_stop();
   if(page==HOME&&!skippedBoot){
    page=WEATHER;
@@ -1301,6 +1425,13 @@ void loop(void){
   stage_surface();
   for(int i=0;i<NC;i++)faceDraw(i);
  }
+#if defined(FOMA_NATIVE_WIFI) && FOMA_NATIVE_WIFI
+ if(page==LOOP_BUILDER){
+  lb_input(now);
+  if(now-lastHud>=70){lastHud=now;lb_hud();}
+  panel_lights(now);return;
+ }
+#endif
  if(page==CATALOG){
   int d=encoder(ENC_SELECT);d+=encoder(ENC_PRESETS);
   if(d){catalog_stop();catalogIndex=wrap(catalogIndex+d,COUNT(catalogSongs));}
