@@ -13,7 +13,6 @@ void app_init(void){lw_ready=lw_graphics_init();if(lw_ready)lw_native_init();}
 void app_ui_init(void){
  if(!lw_ready){draw_text_box(0,96,240,&FONT_M,"MEMORY ERROR",C_WHITE,1);return;}
  lw_native_resume();
- plat_wifi_on(1);
 }
 void app_render(int32_t *lr,uint32_t n,uint32_t master_q12){if(lw_ready)lw_native_render(lr,n,master_q12);else for(uint32_t i=0;i<n*2u;i++)lr[i]=0;}
 void app_panic(void){lw_native_panic();}
