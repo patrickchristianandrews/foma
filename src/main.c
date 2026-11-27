@@ -35,7 +35,7 @@ typedef struct { uint32_t magic; uint8_t style,bpm,sel,mute; uint8_t pat[NS][NC]
 static Project p;
 enum {HOME, MIX, ENV, MOTION, EDIT, GLOBAL, FX, SEQ, SECTION_SOUND, WEATHER, SONG_DETAILS, RADIO, CATALOG};
 static int page, cursor, octave, loopSection, repeat, transpose;
-static volatile int masterLevel=85;
+static volatile int masterLevel=100;
 static uint8_t level[8]={85,85,85,85,85,85,85,85};
 static uint8_t shape[8]={0,1,1,1,1,1,1,1};
 static int toneDepth[8]={0,16,20,28,8,36,24,12};
@@ -198,6 +198,17 @@ static int32_t output_limit(int32_t sample){
  if(a>24000)a=24000;
  return sample<0?-a:a;
 }
+/* Fourfold output makeup gain (+12 dB below the knee). Compress only after
+ * the effects, so internal feedback and per-track balances are unchanged.
+ * Master remains a true post-limiter attenuator, including silence at zero. */
+static int32_t loud_output(int32_t sample,int volume){
+ int32_t a=sample<0?-sample:sample;
+ a*=4;
+ if(a>20000)a=20000+(a-20000)/8;
+ if(a>32000)a=32000;
+ a=a*volume/100;
+ return sample<0?-a:a;
+}
 static void mix_sample(int32_t sample,int pan,int32_t *mono,int32_t *left,int32_t *right){
  sample=instrument_gain(sample);
  if(!pan){*mono+=sample;return;}
@@ -263,8 +274,8 @@ void audio(int32_t *out,uint32_t frames){
  }else if(echoL&&echoR){echoL[echoPos]=0;echoR[echoPos]=0;}
  echoPos=(echoPos+1)&4095u;
  int volume=masterLevel;
- out[n*2]+=output_limit(dryL*volume/100);
- out[n*2+1]+=output_limit(dryR*volume/100);
+ out[n*2]+=loud_output(dryL,volume);
+ out[n*2+1]+=loud_output(dryR,volume);
  }
 }
 /* Catalog player uses the existing FM voices, with exact source pitches,
