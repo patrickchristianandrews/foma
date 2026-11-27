@@ -50,6 +50,8 @@ int settings_load(void *p,uint32_t n){
 }
 int settings_save(const void *p,uint32_t n){return n>PLAT_STORE_MAX?-1:plat_store_save(OBJ_LIQUID,p,n);}
 void print(const char *s){plat_log(s);}
+extern void lw_radio_service(void);
+extern void lw_radio_mix(int32_t *,uint32_t,uint32_t);
 void lw_native_init(void){setup();}
 void lw_native_step(void){
  uint32_t raw=plat_buttons(),b=0,k=plat_keys();
@@ -58,6 +60,7 @@ void lw_native_step(void){
  down_keys=k&~held_keys;up_keys=held_keys&~k;held_keys=k;
  for(int i=0;i<ENC_COUNT;i++)delta[i]=plat_enc(enc_map[i]);
  loop();
+ lw_radio_service();
  plat_lights(lights_btn,lights_key,0,0,glow);
 }
 void lw_native_render(int32_t *lr,uint32_t n,uint32_t gain){
@@ -69,5 +72,6 @@ void lw_native_render(int32_t *lr,uint32_t n,uint32_t gain){
   int32_t s=lr[i];if(s>32767)s=32767;if(s<-32768)s=-32768;
   lr[i]=(s*(int32_t)gain/4096)*256;
  }
+ lw_radio_mix(lr,n,gain);
 }
 void lw_native_panic(void){muted=1;}
