@@ -142,3 +142,14 @@ void lw_radio_mix(int32_t *lr,uint32_t n,uint32_t gain){
  }
  pcm_r=r;
 }
+
+#ifdef PLAT_HOST
+int lw_radio_expect(const char *name,int *v){
+ if(!strcmp(name,"radio_state"))*v=radio_st;
+ else if(!strcmp(name,"radio_buffers"))*v=net_buf!=0||pcm_buf!=0||lin_buf!=0;
+ else if(!strcmp(name,"radio_active"))*v=active;
+ else if(!strcmp(name,"radio_volume"))*v=volume;
+ else return 0;
+ return 1;
+}
+#endif
