@@ -271,9 +271,37 @@ static void generate(void){
 }
 /* Classic preserves the original web composition. Other modes selectively remix. */
 static int songScope=0,songDensity=2,songPart=0;
-static const char *songScopes[]={"CLASSIC","CUSTOM","SECTION","TRACK","CHORDS","ORDER"};
+static const char *songScopes[]={"CLASSIC","CUSTOM","SECTION","TRACK","CHORDS","ORDER","ONE SEQUENCE"};
+/* Randomize exactly one 16-step character pattern. Preserve all other
+ * patterns, tempo, key, progression, arrangement, instrument and mix. */
+static void remix_sequence(int part,int ch){
+ static uint8_t candidate[NS][NC][16];
+ LiquidHarmony ignored;
+ uint8_t next[16];
+ int changed=0;
+ for(int attempt=0;attempt<4&&!changed;attempt++){
+  liquid_song_generate(p.style,random32(),candidate,&ignored);
+  changed=0;
+  for(int i=0;i<16;i++){
+   uint8_t n=candidate[part][ch][i];
+   if(songDensity<2&&i&&rnd(4)<(unsigned)(2-songDensity))n=ch?EMPTY:0;
+   if(songDensity>2&&rnd(8)<(unsigned)(songDensity-2)){
+    if(!ch)n|=4;
+    else if(n==EMPTY)n=(uint8_t)(rnd(4)*2);
+   }
+   next[i]=n;
+   changed|=n!=p.pat[part][ch][i];
+  }
+ }
+ if(!changed){
+  int i=(int)rnd(16);
+  next[i]=ch?(next[i]==EMPTY?0:EMPTY):(next[i]^4);
+ }
+ for(int i=0;i<16;i++)p.pat[part][ch][i]=next[i];
+}
 static void scoped_generate(void){
  if(songScope==0){generate();return;}
+ if(songScope==6){remix_sequence(songPart,p.sel);return;}
  static uint8_t candidate[NS][NC][16];
  LiquidHarmony h;
  liquid_song_generate(p.style,random32(),candidate,&h);
@@ -793,7 +821,7 @@ static void song_details_hud(void){
   frame(x,155,25,18,playing&&pos/64==i?WHITE:colors[songHarmony.arrangement[i]]);
   text(x+7,157,shortSection[songHarmony.arrangement[i]],WHITE,FONT_SMALL);
  }
- text(8,177,"PRESET STYLE / SEL MUTE",accent,FONT_SMALL);
+ text(8,177,songScope==6?"ARP: ONLY THIS SEQUENCE":"PRESET STYLE / SEL MUTE",accent,FONT_SMALL);
  text(8,195,playing?"PLAY STOP / SAVE WHEN STOP":"PLAY START / SAVE SONG",WHITE,FONT_SMALL);
  text(8,222,"ARP REMIX / HOME RADIO",ink,FONT_SMALL);
 }
@@ -824,13 +852,13 @@ static void hud(void){
   if(page==GLOBAL){labels[0]="MASTER";values[0]=masterLevel;labels[1]="KEY";values[1]=transpose;labels[2]="OCTAVE";values[2]=octave;}
   if(page==SEQ){labels[0]="STEP";values[0]=cursor+1;labels[1]="LOOP";values[1]=repeat;labels[2]="SECTION";values[2]=section+1;}
   for(int i=0;i<(page==GLOBAL||page==SEQ?3:6);i++){char value[12];format_int(value,values[i]);text(8,80+i*17,labels[i],WHITE,FONT_SMALL);text(135,80+i*17,value,WHITE,FONT_SMALL);}
-  if(page==SEQ){for(int i=0;i<NC;i++)portrait_at(i,3+30*i,151);text(8,175,"K2 STEP K3 NOTE K4 PART",RGB(190,120,255),FONT_SMALL);}
+  if(page==SEQ){for(int i=0;i<NC;i++)portrait_at(i,3+30*i,151);text(8,175,"ARP NEW SEQ / K4 PART",RGB(190,120,255),FONT_SMALL);}
  }
 
  rect(0,0,240,48,BLACK);text(0,0,"LIQUID WAVE",RGB(190,120,255),FONT_SMALL);text(125,0,pageName[page],WHITE,FONT_SMALL);battery_hud();
  text(0,16,liquid_song_style_name(p.style),WHITE,FONT_SMALL);char b[12];format_int(b,p.bpm);text(112,16,b,WHITE,FONT_SMALL);
  const char *guide=page==SECTION_SOUND?"K1 SECTION / K2 PARAM":
-  page==SEQ?"SELECT / ALGO SOUND":page==FX?"K2 PARAM / K3 VALUE":page==ENV?"K2 ATTACK / K4 TAIL":page==MOTION?"K2 RATE / K3 DEPTH":(page==EDIT||page==HOME||page==MIX)?"SELECT / ALGO SOUND":!p.sel&&page!=GLOBAL&&page!=SEQ?"TEMPO  LEVEL DRIVE TAIL":knobGuide[page];
+  page==SEQ?"SEL TRACK / ALGO SOUND":page==FX?"K2 PARAM / K3 VALUE":page==ENV?"K2 ATTACK / K4 TAIL":page==MOTION?"K2 RATE / K3 DEPTH":(page==EDIT||page==HOME||page==MIX)?"SELECT / ALGO SOUND":!p.sel&&page!=GLOBAL&&page!=SEQ?"TEMPO  LEVEL DRIVE TAIL":knobGuide[page];
  text(0,32,guide,WHITE,FONT_SMALL);
  rect(0,194,240,46,BLACK);text(0,194,sections[section],WHITE,FONT_SMALL);
  text(96,194,names[p.sel],colors[p.sel],FONT_SMALL);text(192,194,recording?"REC":"",WHITE,FONT_SMALL);
@@ -990,7 +1018,11 @@ void loop(void){
  if(button_pressed(BTN_REC))recording=!recording;
  if(button_pressed(BTN_OCT_DOWN)){if(page==SONG_DETAILS)songPart=wrap(songPart-1,NS);else octave=clamp(octave-1,-2,2);}
  if(button_pressed(BTN_OCT_UP)){if(page==SONG_DETAILS)songPart=wrap(songPart+1,NS);else octave=clamp(octave+1,-2,2);}
- if(button_pressed(BTN_ARP)){if(page==SONG_DETAILS)scoped_generate();else generate();pos=0;due=now;remMs=0;}
+ if(button_pressed(BTN_ARP)){
+  if(page==SEQ)remix_sequence(section,p.sel);
+  else if(page==SONG_DETAILS){scoped_generate();if(songScope<=1){pos=0;due=now;remMs=0;}}
+  else {generate();pos=0;due=now;remMs=0;}
+ }
  if(button_pressed(BTN_SAVE)&&!playing){
   SavedMix saved={0};
   saved.song.session.project=p;

@@ -193,4 +193,27 @@ for(let part=0;part<5;part++)for(let ch=0;ch<8;ch++)for(let n=0;n<16;n++){
 assert(changed>0,'track remix changes selected character pattern');
 assert.equal(remixed[5],afterInstrument[5],'track remix preserves tempo');
 assert.deepEqual(remixed.slice(656,685),afterInstrument.slice(656,685),'track remix preserves harmony');
+// Individual pattern regeneration preserves every other byte of the project.
+lab.turn(KNOB4,3); // TRACK -> ONE SEQUENCE
+lab.tap(OCT_UP); // Verse
+lab.tap(SAVE);
+const preOne=lab.store();
+lab.tap(ARP);
+lab.tap(SAVE);
+const postOne=lab.store();
+const targetStart=8+(8+selected)*16;
+assert.notDeepEqual(postOne.slice(targetStart,targetStart+16),preOne.slice(targetStart,targetStart+16),'one sequence changes');
+assert.deepEqual(postOne.slice(0,targetStart),preOne.slice(0,targetStart),'earlier patterns and settings preserved');
+assert.deepEqual(postOne.slice(targetStart+16),preOne.slice(targetStart+16),'later patterns, harmony, instruments and mix preserved');
+lab.tap(SEQ);
+lab.turn(KNOB4,2); // Chorus from initial Intro
+lab.tap(SAVE);
+const preSeq=lab.store();
+lab.tap(ARP);
+lab.tap(SAVE);
+const postSeq=lab.store();
+const seqStart=8+(2*8+selected)*16;
+assert.notDeepEqual(postSeq.slice(seqStart,seqStart+16),preSeq.slice(seqStart,seqStart+16),'SEQ ARP regenerates selected pattern directly');
+assert.deepEqual(postSeq.slice(0,seqStart),preSeq.slice(0,seqStart));
+assert.deepEqual(postSeq.slice(seqStart+16),preSeq.slice(seqStart+16));
 console.log('FM-1 emulator boot, waves, Tidbit, section mixing, transport, project migration and weather-screen checks passed.');
